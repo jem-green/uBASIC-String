@@ -101,16 +101,16 @@ static const struct keyword_token tokens[] = {
 	{"TOKENIZER_STRING",TOKENIZER_STRING},
 	{"TOKENIZER_VARIABLE",TOKENIZER_VARIABLE},
 	{"TOKENIZER_STRINGVARIABLE",TOKENIZER_STRINGVARIABLE},
-  	{"TOKENIZER_PRINT$", TOKENIZER_PRINT$},
-  	{"TOKENIZER_LEFT$",TOKENIZER_LEFT$},
-    {"TOKENIZER_RIGHT$",TOKENIZER_RIGHT$},
-    {"TOKENIZER_MID$",TOKENIZER_MID$},
-    {"TOKENIZER_STR$",TOKENIZER_STR$},
-    {"TOKENIZER_CHR$",TOKENIZER_CHR$},
-    {"TOKENIZER_VAL",TOKENIZER_VAL},
-    {"TOKENIZER_LEN",TOKENIZER_LEN},
-    {"TOKENIZER_INSTR",TOKENIZER_INSTR},
-    {"TOKENIZER_ASC",TOKENIZER_ASC},
+  {"TOKENIZER_PRINT$", TOKENIZER_PRINT$},
+  {"TOKENIZER_LEFT$",TOKENIZER_LEFT$},
+  {"TOKENIZER_RIGHT$",TOKENIZER_RIGHT$},
+  {"TOKENIZER_MID$",TOKENIZER_MID$},
+  {"TOKENIZER_STR$",TOKENIZER_STR$},
+  {"TOKENIZER_CHR$",TOKENIZER_CHR$},
+  {"TOKENIZER_VAL",TOKENIZER_VAL},
+  {"TOKENIZER_LEN",TOKENIZER_LEN},
+  {"TOKENIZER_INSTR",TOKENIZER_INSTR},
+  {"TOKENIZER_ASC",TOKENIZER_ASC},
 	{"TOKENIZER_LET",TOKENIZER_LET},
 	{"TOKENIZER_PRINT",TOKENIZER_PRINT},
 	{"TOKENIZER_IF",TOKENIZER_IF},
@@ -137,6 +137,7 @@ static const struct keyword_token tokens[] = {
 	{"TOKENIZER_SLASH",TOKENIZER_SLASH},
 	{"TOKENIZER_MOD",TOKENIZER_MOD},
 	{"TOKENIZER_HASH",TOKENIZER_HASH},
+  {"TOKENIZER_DOLLAR",TOKENIZER_DOLLAR},
 	{"TOKENIZER_LEFTPAREN",TOKENIZER_LEFTPAREN},
 	{"TOKENIZER_RIGHTPAREN",TOKENIZER_RIGHTPAREN},
 	{"TOKENIZER_LT",TOKENIZER_LT},
@@ -191,7 +192,8 @@ static int get_next_token(void){
   DEBUG_PRINTF("get_next_token: %p.\n", ptr-startptr);
   
   // eat all whitespace
-  while(*ptr == ' ' || *ptr == '\t' || *ptr == '\r') ptr++;
+  while(*ptr == ' ' || *ptr == '\t' || *ptr == '\r')
+    ptr++;
 
   if(*ptr == 0) {
     return TOKENIZER_ENDOFINPUT;
@@ -251,8 +253,8 @@ static int get_next_token(void){
 }
 
 /*---------------------------------------------------------------------------*/
-int tokenizer_stringlookahead() { 
-// return 1 (true) if next 'defining' token is string not integer
+int tokenizer_stringlookahead(void) { 
+  // return 1 (true) if next 'defining' token is string not integer
   char const *saveptr = ptr;
   char const *savenextptr = nextptr;
   int token = current_token;
@@ -346,21 +348,16 @@ void tokenizer_string(char *dest, int len){
   dest[string_len] = 0;
 }
 /*---------------------------------------------------------------------------*/
-void
-tokenizer_error_print(void)
-{
+void tokenizer_error_print(void){
   DEBUG_PRINTF("tokenizer_error_print: %p.\n", ptr-startptr);
 }
 /*---------------------------------------------------------------------------*/
-int
-tokenizer_finished(void)
-{
+int tokenizer_finished(void){
+
   return *ptr == 0 || current_token == TOKENIZER_ENDOFINPUT;
 }
 /*---------------------------------------------------------------------------*/
-int
-tokenizer_variable_num(void)
-{
+int tokenizer_variable_num(void){
   return *ptr - 'a';
 }
 /*---------------------------------------------------------------------------*/
@@ -368,17 +365,12 @@ char const *tokenizer_pos(void){
     return ptr;
 }
 
+/*---------------------------------------------------------------------------*/
 char const *tokenizer_start(void) {
 	return startptr;
 }
 
-//char* tokenizer_token_name(int token){
-//	struct keyword_token kt;
-//	kt = keywords[token];
-//	char* name = kt.keyword;
-//	return(name);
-//}
-
+/*---------------------------------------------------------------------------*/
 char *tokenizer_token_name(int token) {
     for (int i = 0; tokens[i].keyword != NULL; i++) {
         if (tokens[i].token == token) {

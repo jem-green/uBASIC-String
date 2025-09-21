@@ -43,16 +43,33 @@
 typedef VARIABLE_TYPE (*peek_func)(VARIABLE_TYPE);
 typedef void (*poke_func)(VARIABLE_TYPE, VARIABLE_TYPE);
 
+static VARIABLE_TYPE expr(void);
+static void line_statement(void);
+static void statement(void);
+static void index_free(void);
+static VARIABLE_TYPE expr(void);
+static void line_statement(void);
+static void statement(void);
+static void index_free(void);
 void ubasic_init(const char *program);
 void ubasic_run(void);
 int ubasic_finished(void);
-
 VARIABLE_TYPE ubasic_get_variable(int varnum);
 void ubasic_set_variable(int varum, VARIABLE_TYPE value);
 
 // string addition
 char* ubasic_get_stringvariable(int);
 void ubasic_set_stringvariable(int, char *);
-// end of string addition
+static void  var_init(void);
+static char* sexpr(void);
+static char* scpy(char *);
+static char* sconcat(char *, char *);
+static char* sleft(char *, int); 
+static char* sright(char *,int);
+static char* smid(char *, int, int);
+static char* sstr(int);
+static char* schr(int);
+static int sinstr(int, char*, char*);
+// end of string additions
 
 #endif /* __UBASIC_H__ */
