@@ -184,7 +184,7 @@ static int singlechar(void){
   return 0;
 }
 /*---------------------------------------------------------------------------*/
-static int get_next_token(void){
+static int get_next_token(void) {
   struct keyword_token const *kt;
   int i;
 

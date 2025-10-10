@@ -97,18 +97,36 @@ struct line_index {
 };
 struct line_index *line_index_head = NULL;
 struct line_index *line_index_current = NULL;
+
 #define MAX_VARNUM 26
 static VARIABLE_TYPE variables[MAX_VARNUM];
 
 static int ended;
 
+static VARIABLE_TYPE expr(void);
+static void line_statement(void);
+static void statement(void);
+
+static void index_free(void);
+
 peek_func peek_function = NULL;
 poke_func poke_function = NULL;
 
 // string additions
-static char nullstring[] = "\0"; 
-// end of string addition
+static const char nullstring[] = "\0"; 
+static void  var_init(void);
+static char* sexpr(void);
+static char* scpy(char *);
+static char* sconcat(char *, char *);
+static char* sleft(char *, int); 
+static char* sright(char *,int);
+static char* smid(char *, int, int);
+static char* sstr(int);
+static char* schr(int);
+static int sinstr(int, char*, char*);
+// end of string additions
 
+// Public functions
 /*---------------------------------------------------------------------------*/
 void ubasic_init(const char *program){
   program_ptr = program;
