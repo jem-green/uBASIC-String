@@ -84,13 +84,11 @@ enum {
   TOKENIZER_SLASH,
   TOKENIZER_MOD,
   TOKENIZER_HASH,
-  TOKENIZER_DOLLAR,
   TOKENIZER_LEFTPAREN,
   TOKENIZER_RIGHTPAREN,
   TOKENIZER_LT,
   TOKENIZER_GT,
   TOKENIZER_EQ,
-  TOKENIZER_EOL,
   TOKENIZER_LF,
   TOKENIZER_CR
 };
@@ -110,6 +108,7 @@ char const *tokenizer_pos(void);
 char const *tokenizer_start(void);
 
 char *tokenizer_token_name(int token);
+void tokeniser_skip(void);
 
 // string addition
 int tokenizer_stringlookahead(void);

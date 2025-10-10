@@ -101,16 +101,16 @@ static const struct keyword_token tokens[] = {
 	{"TOKENIZER_STRING",TOKENIZER_STRING},
 	{"TOKENIZER_VARIABLE",TOKENIZER_VARIABLE},
 	{"TOKENIZER_STRINGVARIABLE",TOKENIZER_STRINGVARIABLE},
-  {"TOKENIZER_PRINT$", TOKENIZER_PRINT$},
-  {"TOKENIZER_LEFT$",TOKENIZER_LEFT$},
-  {"TOKENIZER_RIGHT$",TOKENIZER_RIGHT$},
-  {"TOKENIZER_MID$",TOKENIZER_MID$},
-  {"TOKENIZER_STR$",TOKENIZER_STR$},
-  {"TOKENIZER_CHR$",TOKENIZER_CHR$},
-  {"TOKENIZER_VAL",TOKENIZER_VAL},
-  {"TOKENIZER_LEN",TOKENIZER_LEN},
-  {"TOKENIZER_INSTR",TOKENIZER_INSTR},
-  {"TOKENIZER_ASC",TOKENIZER_ASC},
+  	{"TOKENIZER_PRINT$", TOKENIZER_PRINT$},
+  	{"TOKENIZER_LEFT$",TOKENIZER_LEFT$},
+    {"TOKENIZER_RIGHT$",TOKENIZER_RIGHT$},
+    {"TOKENIZER_MID$",TOKENIZER_MID$},
+    {"TOKENIZER_STR$",TOKENIZER_STR$},
+    {"TOKENIZER_CHR$",TOKENIZER_CHR$},
+    {"TOKENIZER_VAL",TOKENIZER_VAL},
+    {"TOKENIZER_LEN",TOKENIZER_LEN},
+    {"TOKENIZER_INSTR",TOKENIZER_INSTR},
+    {"TOKENIZER_ASC",TOKENIZER_ASC},
 	{"TOKENIZER_LET",TOKENIZER_LET},
 	{"TOKENIZER_PRINT",TOKENIZER_PRINT},
 	{"TOKENIZER_IF",TOKENIZER_IF},
@@ -137,7 +137,6 @@ static const struct keyword_token tokens[] = {
 	{"TOKENIZER_SLASH",TOKENIZER_SLASH},
 	{"TOKENIZER_MOD",TOKENIZER_MOD},
 	{"TOKENIZER_HASH",TOKENIZER_HASH},
-  {"TOKENIZER_DOLLAR",TOKENIZER_DOLLAR},
 	{"TOKENIZER_LEFTPAREN",TOKENIZER_LEFTPAREN},
 	{"TOKENIZER_RIGHTPAREN",TOKENIZER_RIGHTPAREN},
 	{"TOKENIZER_LT",TOKENIZER_LT},
@@ -310,19 +309,19 @@ void tokenizer_next(void){
   }
   current_token = get_next_token();
 
-  if(current_token == TOKENIZER_REM) {
-      while(!(*nextptr == '\n' || tokenizer_finished())) {
-        ++nextptr;
-      }
-      if(*nextptr == '\n') {
-        ++nextptr;
-      }
-      tokenizer_next();
-  }
-
   DEBUG_PRINTF("tokenizer_next: %p %s.\n", ptr-startptr, tokenizer_token_name(current_token));
-  return;
 }
+
+void tokeniser_skip(void) {
+  while(!(*nextptr == '\n' || tokenizer_finished())) {
+        ++nextptr;
+  }
+  if (*nextptr == '\n') {
+    nextptr++;
+  }
+  ptr = nextptr;
+}
+
 /*---------------------------------------------------------------------------*/
 VARIABLE_TYPE tokenizer_num(void)
 {
@@ -348,16 +347,17 @@ void tokenizer_string(char *dest, int len){
   dest[string_len] = 0;
 }
 /*---------------------------------------------------------------------------*/
-void tokenizer_error_print(void){
+void tokenizer_error_print(void) {
   DEBUG_PRINTF("tokenizer_error_print: %p.\n", ptr-startptr);
 }
-/*---------------------------------------------------------------------------*/
-int tokenizer_finished(void){
 
+/*---------------------------------------------------------------------------*/
+int tokenizer_finished(void) {
   return *ptr == 0 || current_token == TOKENIZER_ENDOFINPUT;
 }
+
 /*---------------------------------------------------------------------------*/
-int tokenizer_variable_num(void){
+int tokenizer_variable_num(void) {
   return *ptr - 'a';
 }
 /*---------------------------------------------------------------------------*/

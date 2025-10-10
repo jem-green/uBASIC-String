@@ -1,6 +1,9 @@
-10 print "start of test"
-20 a = 10.2
-20 b = 0.8
-30 c = a + b
-40 print c
+1 print "start of test"
+10 gosub 100
+20 for i = 1 to 10
+30 print i
+40 next i
 50 print "end of test"
+60 end
+100 print "subroutine"
+110 return
