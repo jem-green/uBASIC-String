@@ -311,7 +311,7 @@ void tokenizer_next(void){
 
   DEBUG_PRINTF("tokenizer_next: %p %s.\n", ptr-startptr, tokenizer_token_name(current_token));
 }
-
+/*---------------------------------------------------------------------------*/
 void tokeniser_skip(void) {
   while(!(*nextptr == '\n' || tokenizer_finished())) {
         ++nextptr;
@@ -321,7 +321,6 @@ void tokeniser_skip(void) {
   }
   ptr = nextptr;
 }
-
 /*---------------------------------------------------------------------------*/
 VARIABLE_TYPE tokenizer_num(void)
 {

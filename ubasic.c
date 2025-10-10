@@ -112,6 +112,8 @@ static void index_free(void);
 peek_func peek_function = NULL;
 poke_func poke_function = NULL;
 
+static void garbage_collect(void);
+
 // string additions
 static const char nullstring[] = "\0"; 
 static void  var_init(void);
@@ -125,7 +127,7 @@ static char* sstr(int);
 static char* schr(int);
 static int sinstr(int, char*, char*);
 // end of string additions
-
+/*---------------------------------------------------------------------------*/
 // Public functions
 /*---------------------------------------------------------------------------*/
 void ubasic_init(const char *program){
@@ -164,7 +166,7 @@ void ubasic_run(void){
 
   line_statement();
 }
-
+/*---------------------------------------------------------------------------*/
 // Private functions
 /*---------------------------------------------------------------------------*/
 static void accept(int token){
@@ -178,7 +180,7 @@ static void accept(int token){
   DEBUG_PRINTF("accept: Expected '%s', got it.\n", tokenizer_token_name(token));
   tokenizer_next();
 }
-
+/*---------------------------------------------------------------------------*/
 // string additions
 /*---------------------------------------------------------------------------*/
 static void var_init() {
@@ -237,7 +239,6 @@ static char* scpy(char *s1) { // return a copy of s1
    freebufptr = bp + l + 1;
    return stringbuffer+bp;
 }
-   
 /*---------------------------------------------------------------------------*/
 static char* sconcat(char *s1, char*s2) { // return the concatenation of s1 and s2
    int bp = freebufptr;   
@@ -460,8 +461,8 @@ static int slogexpr() { // string logical expression
    }
    return r;
 }
+/*---------------------------------------------------------------------------*/
 // end of string additions
-
 /*---------------------------------------------------------------------------*/
 static int varfactor(void) {
   int r;
@@ -851,7 +852,7 @@ static void return_statement(void){
     DEBUG_PRINTF("return_statement: non-matching return.\n");
   }
 }
-
+/*---------------------------------------------------------------------------*/
 static void rem_statement(void) {
   accept(TOKENIZER_REM);
   tokeniser_skip();
@@ -859,7 +860,6 @@ static void rem_statement(void) {
     accept(TOKENIZER_LF);
   }
 }
-
 /*---------------------------------------------------------------------------*/
 static void next_statement(void){
   int var;
@@ -1007,8 +1007,6 @@ static void line_statement(void){
   accept(TOKENIZER_NUMBER);
   statement();
 }
-
-
 /*---------------------------------------------------------------------------*/
 static void set_variable(int varnum, VARIABLE_TYPE value){
   if(varnum > 0 && varnum <= MAX_VARNUM) {
@@ -1022,6 +1020,7 @@ static VARIABLE_TYPE get_variable(int varnum){
   }
   return 0;
 }
+/*---------------------------------------------------------------------------*/
 // string additions
 /*---------------------------------------------------------------------------*/
 static void set_stringvariable(int svarnum, char *svalue) {
@@ -1037,6 +1036,6 @@ static char* get_stringvariable(int varnum){
   }
   return scpy(nullstring);
 }
+/*---------------------------------------------------------------------------*/
 // end of string additions
-
 /*---------------------------------------------------------------------------*/
