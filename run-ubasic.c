@@ -41,8 +41,7 @@
 /*---------------------------------------------------------------------------*/
 // main routine modified to allow execution of BASIC script files 
 
-int
-main(int argc, char **argv, char **envp)
+int main(int argc, char **argv, char **envp)
 {
   char *q;
   char **p;

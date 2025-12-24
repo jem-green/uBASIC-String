@@ -127,6 +127,7 @@ static char* sstr(int);
 static char* schr(int);
 static int sinstr(int, char*, char*);
 // end of string additions
+
 /*---------------------------------------------------------------------------*/
 // Public functions
 /*---------------------------------------------------------------------------*/
