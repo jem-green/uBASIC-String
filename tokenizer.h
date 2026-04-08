@@ -95,6 +95,7 @@ enum {
 
 void tokenizer_goto(const char *program);
 void tokenizer_init(const char *program);
+void tokenizer_reset(void);
 void tokenizer_next(void);
 int tokenizer_token(void);
 VARIABLE_TYPE tokenizer_num(void);

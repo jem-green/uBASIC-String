@@ -38,19 +38,52 @@
 #ifndef __UBASIC_H__
 #define __UBASIC_H__
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "vartype.h"
 
 typedef VARIABLE_TYPE (*peek_func)(VARIABLE_TYPE);
 typedef void (*poke_func)(VARIABLE_TYPE, VARIABLE_TYPE);
 
+/*
+ * Single buffer layout (aligned with init(uint8_t* memory) style):
+ *   int32_t gosub_depth at offset 0
+ *   int32_t for_depth at offset 4
+ *   int32_t gosub_stack[UBASIC_MAX_GOSUB_STACK_DEPTH]
+ *   struct for_state for_stack[UBASIC_MAX_FOR_STACK_DEPTH]
+ *   VARIABLE_TYPE variables[UBASIC_VARIABLE_COUNT]  (a-z, then A-Z)
+ *   program bytes (NUL-terminated; capacity = buffer size - UBASIC_MEM_PROGRAM_OFFSET)
+ */
+#define UBASIC_MAX_GOSUB_STACK_DEPTH 10
+#define UBASIC_MAX_FOR_STACK_DEPTH 4
+#define UBASIC_VARIABLE_COUNT 26
+
+typedef struct for_state {
+  int32_t line_after_for;
+  int32_t for_variable_index; /* 0..51 (a-z then A-Z) */
+  int32_t to;
+} for_state;
+
+#define UBASIC_MEM_GOSUB_DEPTH_OFFSET 0
+#define UBASIC_MEM_FOR_DEPTH_OFFSET   4
+#define UBASIC_MEM_GOSUB_STACK_OFFSET 8
+#define UBASIC_MEM_FOR_STACK_OFFSET \
+  (UBASIC_MEM_GOSUB_STACK_OFFSET + UBASIC_MAX_GOSUB_STACK_DEPTH * (int)sizeof(int32_t))
+#define UBASIC_MEM_VARIABLES_OFFSET \
+  (UBASIC_MEM_FOR_STACK_OFFSET + UBASIC_MAX_FOR_STACK_DEPTH * (int)sizeof(for_state))
+#define UBASIC_MEM_PROGRAM_OFFSET \
+  (UBASIC_MEM_VARIABLES_OFFSET + UBASIC_VARIABLE_COUNT * (int)sizeof(VARIABLE_TYPE))
+
+#define UBASIC_MIN_MEMORY_BYTES (UBASIC_MEM_PROGRAM_OFFSET + 1u)
+
 // Possibly public
 
-void ubasic_init(const char *program);
+void ubasic_init(uint8_t *memory);
+void ubasic_reset(void);
 void ubasic_run(void);
 int ubasic_finished(void);
-
-VARIABLE_TYPE get_variable(int varnum);
-void set_variable(int varum, VARIABLE_TYPE value);
+void ubasic_load_program(const char *program);
 
 // string addition
 char* get_stringvariable(int);

@@ -50,9 +50,7 @@
 
 static char const *ptr, *nextptr, *startptr;
 
-static char const *prog;
-
-#define MAX_NUMLEN 5
+#define MAX_NUMLEN 6
 
 struct keyword_token {
   char *keyword;
@@ -187,8 +185,9 @@ static int singlechar(void){
 static int get_next_token(void) {
   struct keyword_token const *kt;
   int i;
-
-  DEBUG_PRINTF("get_next_token: %p.\n", ptr-startptr);
+  #if VERBOSE
+    DEBUG_PRINTF("get_next_token: %p.\n", ptr-startptr);
+  #endif
   
   // eat all whitespace
   while(*ptr == ' ' || *ptr == '\t' || *ptr == '\r')
@@ -279,19 +278,24 @@ int tokenizer_stringlookahead(void) {
   return si; 
 }
 /*---------------------------------------------------------------------------*/
-void tokenizer_goto(const char *program){
+void tokenizer_goto(const char *program) {
   ptr = program;
   current_token = get_next_token();
 }
 /*---------------------------------------------------------------------------*/
-void tokenizer_init(const char *program){
+void tokenizer_init(const char *program) {
   ptr = program;
-  prog = program;
   startptr = program;
   current_token = get_next_token();
 }
 /*---------------------------------------------------------------------------*/
-int tokenizer_token(void){
+void tokenizer_reset() {
+  ptr = startptr;
+  current_token = get_next_token();
+}
+
+/*---------------------------------------------------------------------------*/
+int tokenizer_token(void) {
   return current_token;
 }
 /*---------------------------------------------------------------------------*/
@@ -301,15 +305,18 @@ void tokenizer_next(void){
     return;
   }
 
-  DEBUG_PRINTF("tokenizer_next: %p.\n", nextptr - startptr);
+  #if VERBOSE
+    DEBUG_PRINTF("tokenizer_next: %p.\n", nextptr - startptr);
+  #endif
   ptr = nextptr;
 
   while(*ptr == ' ') {
     ++ptr;
   }
   current_token = get_next_token();
-
-  DEBUG_PRINTF("tokenizer_next: %p %s.\n", ptr-startptr, tokenizer_token_name(current_token));
+  #if VERBOSE
+    DEBUG_PRINTF("tokenizer_next: %p %s.\n", ptr-startptr, tokenizer_token_name(current_token));
+  #endif
 }
 /*---------------------------------------------------------------------------*/
 void tokeniser_skip(void) {

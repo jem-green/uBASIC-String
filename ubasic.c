@@ -49,7 +49,8 @@
 
 #include <stdio.h> /* printf() */
 #include <stdlib.h> /* exit() */
-#include <string.h> /* strlen() etc */
+#include <string.h> /* strlen(), memcpy(), sprintf() */
+#include <stdint.h>
 
 // Probably private
 
@@ -62,10 +63,22 @@ static void index_free(void);
 static VARIABLE_TYPE expr(void);
 void set_variable(int varum, VARIABLE_TYPE value);
 VARIABLE_TYPE get_variable(int varnum);
+static void gosub_push(int32_t line_num);
+static int32_t gosub_pop(void);
+static void for_push(for_state state);
+static for_state for_pop(void);
 
 static char const *program_ptr;
 #define MAX_STRINGLEN 40
 static char string[MAX_STRINGLEN];
+
+static uint8_t *mem_base = NULL;
+
+static int32_t *gosub_depth_cell = NULL;
+static int32_t *for_depth_cell = NULL;
+static int32_t *gosub_stack_mem = NULL;
+static for_state *for_stack = NULL;
+static VARIABLE_TYPE *variables_mem = NULL;
 
 // string additions
 #define MAX_STRINGVARLEN 255
@@ -73,33 +86,19 @@ static char string[MAX_STRINGLEN];
 #define GBGCHECK         3500
 static char stringbuffer[MAX_BUFFERLEN];
 static int freebufptr = 0;
-#define MAX_SVARNUM 26 
+#define MAX_SVARNUM 26
 static char *stringvariables[MAX_SVARNUM];
 // end of string additions
-
-#define MAX_GOSUB_STACK_DEPTH 10
-static int gosub_stack[MAX_GOSUB_STACK_DEPTH];
-static int gosub_stack_ptr;
-
-struct for_state {
-  int line_after_for;
-  int for_variable;
-  int to;
-};
-#define MAX_FOR_STACK_DEPTH 4
-static struct for_state for_stack[MAX_FOR_STACK_DEPTH];
-static int for_stack_ptr;
 
 struct line_index {
   int line_number;
   char const *program_text_position;
   struct line_index *next;
 };
+
 struct line_index *line_index_head = NULL;
 struct line_index *line_index_current = NULL;
 
-#define MAX_VARNUM 26
-static VARIABLE_TYPE variables[MAX_VARNUM];
 
 static int ended;
 
@@ -115,39 +114,86 @@ poke_func poke_function = NULL;
 static void garbage_collect(void);
 
 // string additions
-static const char nullstring[] = "\0"; 
+static char nullstring[] = "\0"; 
 static void  var_init(void);
 static char* sexpr(void);
-static char* scpy(char *);
-static char* sconcat(char *, char *);
-static char* sleft(char *, int); 
-static char* sright(char *,int);
-static char* smid(char *, int, int);
+static char* scpy(const char *);
+static char* sconcat(const char *, const char *);
+static char* sleft(const char *, int); 
+static char* sright(const char *,int);
+static char* smid(const char *, int, int);
 static char* sstr(int);
 static char* schr(int);
-static int sinstr(int, char*, char*);
+static int sinstr(int, const char*, const char*);
 // end of string additions
 
 /*---------------------------------------------------------------------------*/
 // Public functions
 /*---------------------------------------------------------------------------*/
-void ubasic_init(const char *program){
-  program_ptr = program;
-  for_stack_ptr = gosub_stack_ptr = 0;
+void ubasic_init(uint8_t *memory) {
+  mem_base = memory;
+  gosub_depth_cell = (int32_t *)(memory + UBASIC_MEM_GOSUB_DEPTH_OFFSET);
+  for_depth_cell = (int32_t *)(memory + UBASIC_MEM_FOR_DEPTH_OFFSET);
+  gosub_stack_mem = (int32_t *)(memory + UBASIC_MEM_GOSUB_STACK_OFFSET);
+  for_stack = (for_state *)(memory + UBASIC_MEM_FOR_STACK_OFFSET);
+  variables_mem = (VARIABLE_TYPE *)(memory + UBASIC_MEM_VARIABLES_OFFSET);
+  *gosub_depth_cell = 0;
+  *for_depth_cell = 0;
+  memset(variables_mem, 0, UBASIC_VARIABLE_COUNT * sizeof(VARIABLE_TYPE));
+  program_ptr = (char const *)(memory + UBASIC_MEM_PROGRAM_OFFSET);
+  memory[UBASIC_MEM_PROGRAM_OFFSET] = '\0';
   index_free();
-  tokenizer_init(program);
+  tokenizer_init(program_ptr);
   var_init(); // string addition
   ended = 0;
+  #if VERBOSE
+    DEBUG_PRINTF("ubasic_init: Initializing uBasic.\n");
+  #endif
 }
 /*---------------------------------------------------------------------------*/
-void ubasic_init_peek_poke(const char *program, peek_func peek, poke_func poke){
-  program_ptr = program;
-  for_stack_ptr = gosub_stack_ptr = 0;
-  index_free();
+void ubasic_init_peek_poke(uint8_t *memory, peek_func peek, poke_func poke) {
+  ubasic_init(memory);
   peek_function = peek;
   poke_function = poke;
-  tokenizer_init(program);
+  #if VERBOSE
+    DEBUG_PRINTF("ubasic_init_peek_poke: Initializing uBasic with peek/poke.\n");
+  #endif
+}
+/*---------------------------------------------------------------------------*/
+void ubasic_reset(void) {
+  index_free();
+  tokenizer_reset();
+  if (gosub_depth_cell != NULL) {
+    *gosub_depth_cell = 0;
+  }
+  if (for_depth_cell != NULL) {
+    *for_depth_cell = 0;
+  }
   ended = 0;
+
+  #if VERBOSE
+    DEBUG_PRINTF("ubasic_reset: Resetting uBasic.\n");
+  #endif
+}
+/*---------------------------------------------------------------------------*/
+void ubasic_load_program(const char *program) {
+  size_t len;
+
+  if (mem_base == NULL) {
+    DEBUG_PRINTF("ubasic_load_program: call ubasic_init first.\n");
+    return;
+  }
+  index_free();
+  len = strlen(program);
+  memcpy(mem_base + UBASIC_MEM_PROGRAM_OFFSET, program, len + 1);
+  program_ptr = (char const *)(mem_base + UBASIC_MEM_PROGRAM_OFFSET);
+  tokenizer_init(program_ptr);
+  *gosub_depth_cell = 0;
+  *for_depth_cell = 0;
+  ended = 0;
+  #if VERBOSE
+    DEBUG_PRINTF("ubasic_load_program: Loaded program of length %u.\n", (unsigned)len);
+  #endif
 }
 /*---------------------------------------------------------------------------*/
 int ubasic_finished(void){
@@ -173,9 +219,9 @@ void ubasic_run(void){
 static void accept(int token){
   if(token != tokenizer_token()) {
     DEBUG_PRINTF("accept: Token not what was expected (expected '%s', got %s).\n",
-  	  tokenizer_token_name(token),
-	  tokenizer_token_name(tokenizer_token()));
-      tokenizer_error_print();
+    tokenizer_token_name(token),
+    tokenizer_token_name(tokenizer_token()));
+    tokenizer_error_print();
     exit(1);
   }
   DEBUG_PRINTF("accept: Expected '%s', got it.\n", tokenizer_token_name(token));
@@ -187,8 +233,8 @@ static void accept(int token){
 static void var_init() {
    int i;
    freebufptr = 0;
-   for (i=0; i<MAX_VARNUM; i++) 
-     variables[i] = 0;
+   for (i=0; i<UBASIC_VARIABLE_COUNT; i++) 
+      set_variable(i, 0);
    for (i=0; i<MAX_SVARNUM; i++) 
 	   stringvariables[i] = scpy(nullstring);
 }
@@ -230,7 +276,7 @@ static void garbage_collect() {
   free(temp); // free temp space
  }
 /*---------------------------------------------------------------------------*/
-static char* scpy(char *s1) { // return a copy of s1
+static char* scpy(const char *s1) { // return a copy of s1
    int bp = freebufptr;
    int l;
    l = strlen(s1);
@@ -241,7 +287,7 @@ static char* scpy(char *s1) { // return a copy of s1
    return stringbuffer+bp;
 }
 /*---------------------------------------------------------------------------*/
-static char* sconcat(char *s1, char*s2) { // return the concatenation of s1 and s2
+static char* sconcat(const char *s1, const char*s2) { // return the concatenation of s1 and s2
    int bp = freebufptr;   
    int rp = bp;
    int l1, l2;
@@ -266,7 +312,7 @@ static char* sconcat(char *s1, char*s2) { // return the concatenation of s1 and 
    return (stringbuffer+rp);   
 }
 /*---------------------------------------------------------------------------*/
-static char* sleft(char *s1, int l) { // return the left l chars of s1
+static char* sleft(const char *s1, int l) { // return the left l chars of s1
    int bp = freebufptr;
    int rp = bp;
    int i;
@@ -289,7 +335,7 @@ static char* sleft(char *s1, int l) { // return the left l chars of s1
    return stringbuffer + rp;
 }
 /*---------------------------------------------------------------------------*/
-static char* sright(char *s1, int l) { // return the right l chars of s1
+static char* sright(const char *s1, int l) { // return the right l chars of s1
    int bp = freebufptr;
    int rp = bp;
    int i, j;
@@ -313,7 +359,7 @@ static char* sright(char *s1, int l) { // return the right l chars of s1
    return stringbuffer + rp;
 }
 /*---------------------------------------------------------------------------*/
-static char* smid(char *s1, int l1, int l2) { // return the l2 chars of s1 starting at offset l1
+static char* smid(const char *s1, int l1, int l2) { // return the l2 chars of s1 starting at offset l1
    int bp = freebufptr;
    int rp = bp;
    int i, j;
@@ -356,7 +402,7 @@ static char* schr(int j) { // return the character whose ASCII code is j
    return stringbuffer + rp;
 }
 /*---------------------------------------------------------------------------*/
-static int sinstr(int j, char *s, char *s1) { // return the position of s1 in s (or 0) 
+static int sinstr(int j, const char *s, const char *s1) { // return the position of s1 in s (or 0) 
    char *p;
    p = strstr(s+j, s1);
    if (p == NULL)
@@ -467,7 +513,7 @@ static int slogexpr() { // string logical expression
 /*---------------------------------------------------------------------------*/
 static int varfactor(void) {
   int r;
-  DEBUG_PRINTF("varfactor: obtaining %d from variable %d.\n", variables[tokenizer_variable_num()], tokenizer_variable_num());
+  DEBUG_PRINTF("varfactor: obtaining %d from variable %d.\n", get_variable(tokenizer_variable_num()), tokenizer_variable_num());
   r = get_variable(tokenizer_variable_num());
   accept(TOKENIZER_VARIABLE);
   return r;
@@ -567,14 +613,14 @@ static int term(void) {
 static VARIABLE_TYPE expr(void){
   int t1, t2;
   int op;
-  
+
   t1 = term();
   op = tokenizer_token();
   DEBUG_PRINTF("expr: token %s.\n", tokenizer_token_name(op));
   while(op == TOKENIZER_PLUS ||
-		op == TOKENIZER_MINUS ||
-		op == TOKENIZER_AND ||
-		op == TOKENIZER_OR) {
+       op == TOKENIZER_MINUS ||
+       op == TOKENIZER_AND ||
+       op == TOKENIZER_OR) {
     tokenizer_next();
     t2 = term();
     DEBUG_PRINTF("expr: %d %d %d.\n", t1, op, t2);
@@ -632,7 +678,7 @@ static void index_free(void) {
   if(line_index_head != NULL) {
     line_index_current = line_index_head;
     do {
-      DEBUG_PRINTF("Freeing index for line %d.\n", line_index_current->line_number);
+      DEBUG_PRINTF("index_free: Freeing index for line %d.\n", line_index_current->line_number);
       line_index_head = line_index_current;
       line_index_current = line_index_current->next;
       free(line_index_head);
@@ -737,14 +783,15 @@ static void jump_linenum(int linenum) {
 /*---------------------------------------------------------------------------*/
 static void goto_statement(void) {
   accept(TOKENIZER_GOTO);
+  DEBUG_PRINTF("jump_linenum: goto.\n");
   jump_linenum(tokenizer_num());
 }
 /*---------------------------------------------------------------------------*/
 static void print_statement(void) {
-// string additions
+  // string additions
   static char buf[128];
   buf[0]=0;
-
+  // end of string additions
   accept(TOKENIZER_PRINT);
   DEBUG_PRINTF("print_statement: Loop.\n");
   do {
@@ -758,11 +805,12 @@ static void print_statement(void) {
     } else if(tokenizer_token() == TOKENIZER_SEMICOLON) {
       tokenizer_next();
     } else if(tokenizer_token() == TOKENIZER_VARIABLE ||
-          tokenizer_token() == TOKENIZER_NUMBER) {
-		sprintf(buf+strlen(buf), "%d", expr());
+      tokenizer_token() == TOKENIZER_NUMBER) {
+      sprintf(buf+strlen(buf), "%d", expr());
 	} else if (tokenizer_token() == TOKENIZER_CR){
 		tokenizer_next();
     } else {
+	  // string additions
       if (tokenizer_stringlookahead()) {
           sprintf(buf+strlen(buf), "%s", sexpr());
       } else {
@@ -786,7 +834,9 @@ static void if_statement(void){
   accept(TOKENIZER_IF);
 
   r = relation();
-  DEBUG_PRINTF("if_statement: relation %d.\n", r);
+  #if VERBOSE
+  	DEBUG_PRINTF("if_statement: relation %d.\n", r);
+  #endif
   accept(TOKENIZER_THEN);
   if(r) {
     statement();
@@ -814,7 +864,7 @@ static void let_statement(void){
      accept(TOKENIZER_EQ);
      set_variable(var, expr());
 	 #if VERBOSE
-     	DEBUG_PRINTF("let_statement: assign %d to %d.\n", variables[var], var);
+    DEBUG_PRINTF("let_statement: assign %d to %d.\n", get_variable(var), var);
      #endif
 	 accept(TOKENIZER_LF);
   } else if (tokenizer_token() == TOKENIZER_STRINGVARIABLE) {
@@ -835,9 +885,11 @@ static void gosub_statement(void) {
   linenum = tokenizer_num();
   accept(TOKENIZER_NUMBER);
   accept(TOKENIZER_LF);
-  if(gosub_stack_ptr < MAX_GOSUB_STACK_DEPTH) {
-    gosub_stack[gosub_stack_ptr] = tokenizer_num();
-    gosub_stack_ptr++;
+  if(*gosub_depth_cell < UBASIC_MAX_GOSUB_STACK_DEPTH) {
+
+    /* Push the current return line into the configured gosub stack (memory or internal). */
+    gosub_push(tokenizer_num());
+
     jump_linenum(linenum);
   } else {
     DEBUG_PRINTF("gosub_statement: gosub stack exhausted.\n");
@@ -846,9 +898,9 @@ static void gosub_statement(void) {
 /*---------------------------------------------------------------------------*/
 static void return_statement(void){
   accept(TOKENIZER_RETURN);
-  if(gosub_stack_ptr > 0) {
-    gosub_stack_ptr--;
-    jump_linenum(gosub_stack[gosub_stack_ptr]);
+  if(*gosub_depth_cell > 0) {
+    int32_t retline = gosub_pop();
+    jump_linenum(retline);
   } else {
     DEBUG_PRINTF("return_statement: non-matching return.\n");
   }
@@ -856,6 +908,7 @@ static void return_statement(void){
 /*---------------------------------------------------------------------------*/
 static void rem_statement(void) {
   accept(TOKENIZER_REM);
+  DEBUG_PRINTF("rem_statement: Skipping comment.\n");
   tokeniser_skip();
   if (tokenizer_token() == TOKENIZER_LF) {
     accept(TOKENIZER_LF);
@@ -868,18 +921,21 @@ static void next_statement(void){
   accept(TOKENIZER_NEXT);
   var = tokenizer_variable_num();
   accept(TOKENIZER_VARIABLE);
-  if(for_stack_ptr > 0 &&
-     var == for_stack[for_stack_ptr - 1].for_variable) {
-     set_variable(var,
-      get_variable(var) + 1);
-    if(get_variable(var) <= for_stack[for_stack_ptr - 1].to) {
-      jump_linenum(for_stack[for_stack_ptr - 1].line_after_for);
+  if(*for_depth_cell > 0 &&
+     var == (int)for_stack[*for_depth_cell - 1].for_variable_index) {
+    for_state top = for_stack[*for_depth_cell - 1];
+    set_variable(var, get_variable(var) + 1);
+    if(get_variable(var) <= top.to) {
+      jump_linenum(top.line_after_for);
     } else {
-      for_stack_ptr--;
+      for_pop();
       accept(TOKENIZER_LF);
     }
   } else {
-    DEBUG_PRINTF("next_statement: non-matching next (expected %d, found %d).\n", for_stack[for_stack_ptr - 1].for_variable, var);
+    if (*for_depth_cell > 0) {
+      DEBUG_PRINTF("next_statement: non-matching next (expected %d, found %d).\n",
+          (int)for_stack[*for_depth_cell - 1].for_variable_index, var);
+    }
     accept(TOKENIZER_LF);
   }
 
@@ -897,19 +953,15 @@ static void for_statement(void) {
   to = expr();
   accept(TOKENIZER_LF);
 
-  if(for_stack_ptr < MAX_FOR_STACK_DEPTH) {
-    for_stack[for_stack_ptr].line_after_for = tokenizer_num();
-    for_stack[for_stack_ptr].for_variable = for_variable;
-    for_stack[for_stack_ptr].to = to;
-    #if VERBOSE
-    DEBUG_PRINTF("for_statement: new for, var %d to %d.\n",
-  		for_stack[for_stack_ptr].for_variable,
-    	for_stack[for_stack_ptr].to);
-    #endif
-    for_stack_ptr++;
-  } else {
-    DEBUG_PRINTF("for_statement: for stack depth exceeded.\n");
-  }
+  for_state st;
+  st.line_after_for = (int32_t)tokenizer_num();
+  st.for_variable_index = (int32_t)for_variable;
+  st.to = (int32_t)to;
+  for_push(st);
+  #if VERBOSE
+    DEBUG_PRINTF("for_statement: new for, var %d to %d.\n", (int)st.for_variable_index, (int)st.to);
+  #endif
+  
 }
 /*---------------------------------------------------------------------------*/
 static void peek_statement(void){
@@ -943,6 +995,7 @@ static void poke_statement(void)
 static void end_statement(void)
 {
   accept(TOKENIZER_END);
+  DEBUG_PRINTF("end_statement: Ending program.\n");
   ended = 1;
 }
 /*---------------------------------------------------------------------------*/
@@ -1010,14 +1063,14 @@ static void line_statement(void){
 }
 /*---------------------------------------------------------------------------*/
 static void set_variable(int varnum, VARIABLE_TYPE value){
-  if(varnum > 0 && varnum <= MAX_VARNUM) {
-    variables[varnum] = value;
+  if(variables_mem != NULL && varnum >= 0 && varnum < UBASIC_VARIABLE_COUNT) {
+    variables_mem[varnum] = value;
   }
 }
 /*---------------------------------------------------------------------------*/
 static VARIABLE_TYPE get_variable(int varnum){
-  if(varnum > 0 && varnum <= MAX_VARNUM) {
-    return variables[varnum];
+  if(variables_mem != NULL && varnum >= 0 && varnum < UBASIC_VARIABLE_COUNT) {
+    return variables_mem[varnum];
   }
   return 0;
 }
@@ -1038,5 +1091,53 @@ static char* get_stringvariable(int varnum){
   return scpy(nullstring);
 }
 /*---------------------------------------------------------------------------*/
+static int32_t gosub_pop(void) {
+  int32_t ptr = *gosub_depth_cell;
+  if (ptr == 0) {
+    DEBUG_PRINTF("gosub_pop: underflow (ptr=0)\n");
+    return 0;
+  }
+  ptr--;
+  *gosub_depth_cell = ptr;
+  return gosub_stack_mem[ptr];
+}
+
+/*---------------------------------------------------------------------------*/
 // end of string additions
 /*---------------------------------------------------------------------------*/
+static void gosub_push(int32_t line_num) {
+  int32_t ptr = *gosub_depth_cell;
+  if (ptr >= UBASIC_MAX_GOSUB_STACK_DEPTH) {
+    DEBUG_PRINTF("gosub_push: overflow (ptr=%d)\n", (int)ptr);
+    return;
+  }
+  gosub_stack_mem[ptr] = line_num;
+  *gosub_depth_cell = ptr + 1;
+}
+/*---------------------------------------------------------------------------*/
+static void for_push(for_state state) {
+  int32_t depth = *for_depth_cell;
+  if (depth < UBASIC_MAX_FOR_STACK_DEPTH) {
+    for_stack[depth++] = state;
+    *for_depth_cell = depth;
+  } else {
+    DEBUG_PRINTF("for_push: for stack depth exceeded.\n");
+  }
+}
+/*---------------------------------------------------------------------------*/
+static for_state for_pop(void) {
+  for_state error_state = {-1, '\0', 0};
+  int32_t depth = *for_depth_cell;
+  if (depth > 0) {
+    for_state value = for_stack[--depth];
+    *for_depth_cell = depth;
+    return value;
+  } else {
+    DEBUG_PRINTF("for_pop: for stack underflow.\n");
+    return error_state;
+  }
+}
+/*---------------------------------------------------------------------------*/
+
+
+

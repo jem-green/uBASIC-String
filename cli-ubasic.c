@@ -29,8 +29,10 @@ static int find_linenum(int linenum);
 
 #define MAX_LINE_LENGTH 255
 #define MEMORY_SIZE 8192
+#define MAX_PROGRAM_SIZE 4096
 
-static char program[MEMORY_SIZE];
+static char memory[MEMORY_SIZE];
+static char program[MAX_PROGRAM_SIZE];
 
 static char const *ptr, *nextptr, *startptr;
 
@@ -60,7 +62,11 @@ int main(int argc, char* argv[]) {
     }
     buffer[bytes] = '\0';
     // Copy buffer to program
-    memcpy(program, buffer, sizeof(buffer));
+    if ((bytes + 1) > MAX_PROGRAM_SIZE) {
+      printf("Program file too large - terminating\n");
+      return (-1);
+    }
+    memcpy(program, buffer, bytes + 1);
 
   }
   
@@ -90,7 +96,8 @@ int main(int argc, char* argv[]) {
 }
 /*---------------------------------------------------------------------------*/
 static void run_program(void) {
-    ubasic_init(program);
+    ubasic_init(memory);
+    ubasic_load_program(program);
     while (!ubasic_finished()) {
         ubasic_run();
     }
