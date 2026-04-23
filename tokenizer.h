@@ -106,7 +106,7 @@ void tokenizer_error_print(void);
 char const *tokenizer_pos(void);
 char const *tokenizer_start(void);
 char *tokenizer_token_name(int token);
-void tokeniser_skip(void);
+void tokenizer_skip(void);
 
 // string addition
 int tokenizer_stringlookahead(void);

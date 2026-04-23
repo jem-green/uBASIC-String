@@ -1,0 +1,85 @@
+(* iBasic EBNF - grammar for the syntax accepted by Tokenizer/BasicInterpreter *)
+
+program        = { line } ;
+
+line           = LINE_NUMBER WS? statement LF ;
+LINE_NUMBER    = NUMBER ;
+
+statement      = printStmt
+               | ifStmt
+               | gotoStmt
+               | gosubStmt
+               | returnStmt
+               | forStmt
+               | nextStmt
+               | letStmt
+               | peekStmt
+               | pokeStmt
+               | endStmt
+               | remStmt
+               ;
+               (* Note: TOKENIZER_CALL is recognized but not implemented in the interpreter *)
+
+printStmt      = "print" WS? printList ;
+printList      = printItem { ("," | ";") WS? printItem } [ CR ] ;
+printItem      = STRING | simpleExpr ;
+               (* Note: PRINT only accepts expressions starting with STRING, VARIABLE, or NUMBER.
+                  Parenthesized expressions like "print (1+2)" are not supported. *)
+simpleExpr     = ( VARIABLE | NUMBER ) { WS? ("+" | "-" | "&" | "|" | "*" | "/" | "%") WS? ( VARIABLE | NUMBER ) } ;
+
+ifStmt         = "if" WS? relation WS? "then" WS? statement [ WS? "else" WS? statement ] ;
+               (* Warning: Nested single-line IF statements may bind ELSE incorrectly.
+                  The false-branch skip does not track nesting depth. *)
+
+gotoStmt       = "goto" WS? NUMBER ;
+
+gosubStmt      = "gosub" WS? NUMBER ;
+
+returnStmt     = "return" ;
+
+forStmt        = "for" WS? VARIABLE WS? "=" WS? expression WS? "to" WS? expression ;
+nextStmt       = "next" WS? VARIABLE ;
+
+letStmt        = [ "let" WS? ] VARIABLE WS? "=" WS? expression ;
+
+peekStmt       = "peek" WS? expression WS? "," WS? VARIABLE ;
+pokeStmt       = "poke" WS? expression WS? "," WS? expression ;
+
+endStmt        = "end" ;
+remStmt        = "rem" WS? { CHAR_EXCEPT_LF } ;
+
+(* Expressions and relations *)
+relation       = expression [ ("<" | ">" | "=") WS? expression ] ;
+expression     = term { WS? ("+" | "-" | "&" | "|") WS? term } ;
+term           = factor { WS? ("*" | "/" | "%") WS? factor } ;
+factor         = NUMBER | VARIABLE | "(" WS? expression WS? ")" ;
+
+(* Lexical tokens (terminals) *)
+NUMBER         = DIGIT { DIGIT } ;  (* Maximum 6 digits (MAX_NUMLEN) *)
+STRING         = '"' { ANY_EXCEPT_QUOTE } '"' ;
+VARIABLE       = LOWERCASE_LETTER ;  (* Single lowercase letter a-z only; 26 variables total *)
+
+WS             = (" " | "\t" | CR)* ;
+LF             = "\n" ;
+CR             = "\r" ;
+
+DIGIT             = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+LOWERCASE_LETTER  = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k"
+                  | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v"
+                  | "w" | "x" | "y" | "z" ;
+
+ANY_EXCEPT_QUOTE = ? any character except '"' and '\n' ? ;
+CHAR_EXCEPT_LF  = ? any character except '\n' ? ;
+
+(* Implementation Notes:
+   - All keywords (print, if, then, else, for, to, next, goto, gosub, return, let, peek, poke, end, rem)
+     must be lowercase. The tokenizer does case-sensitive matching.
+   - Numbers are limited to 6 digits maximum (MAX_NUMLEN in tokenizer.c).
+   - Variables are single lowercase letters a-z only (26 variables total, UBASIC_VARIABLE_COUNT).
+     Uppercase letters are NOT supported as variables despite tokenizer comment claiming 0..51 range.
+   - Strings are delimited by double quotes and cannot contain newline characters.
+   - Each statement must end with a line feed (LF / \n).
+   - PRINT statement has limited expression support - does not accept parenthesized expressions directly.
+   - Nested single-line IF statements may have incorrect ELSE binding due to lack of nesting tracking.
+   - CALL keyword is recognized by tokenizer but not implemented in the interpreter.
+*)

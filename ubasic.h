@@ -47,17 +47,37 @@ typedef VARIABLE_TYPE (*peek_func)(VARIABLE_TYPE);
 typedef void (*poke_func)(VARIABLE_TYPE, VARIABLE_TYPE);
 
 /*
- * Single buffer layout (aligned with init(uint8_t* memory) style):
- *   int32_t gosub_depth at offset 0
- *   int32_t for_depth at offset 4
- *   int32_t gosub_stack[UBASIC_MAX_GOSUB_STACK_DEPTH]
- *   struct for_state for_stack[UBASIC_MAX_FOR_STACK_DEPTH]
- *   VARIABLE_TYPE variables[UBASIC_VARIABLE_COUNT]  (a-z, then A-Z)
- *   program bytes (NUL-terminated; capacity = buffer size - UBASIC_MEM_PROGRAM_OFFSET)
+ * Single buffer layout - 8-bit OS style with variables at top:
+ *   LOW MEMORY:
+ *     int32_t resume_offset at offset 0 (tokenizer position for resume)
+ *     int32_t gosub_depth at offset 4
+ *     int32_t for_depth at offset 8
+ *     int32_t gosub_stack[UBASIC_MAX_GOSUB_STACK_DEPTH]
+ *     struct for_state for_stack[UBASIC_MAX_FOR_STACK_DEPTH]
+ *     program bytes (NUL-terminated, grows upward)
+ *   
+ *   DYNAMIC SPACE (string pool grows down from high memory during runtime)
+ *   
+ *   HIGH MEMORY (grows down from top):
+ *   char string_pool[]  (variable size, grows DOWN during runtime)
+ *   ubasic_string_state_t  (pool_base, pool_min + var_off[26])
+ *   VARIABLE_TYPE variables[UBASIC_VARIABLE_COUNT]  (a-z)
+ *
+ * String pool is reset on program load and grows downward during execution.
+ * UBASIC_STRING_POOL_SIZE is now ignored (pool uses all available space).
+ * Scratch buffer must still be >= 4000 for str_pool_compact.
  */
+#define UBASIC_STRING_VAR_MAXLEN 255
+#ifndef UBASIC_STRING_POOL_SIZE
+#define UBASIC_STRING_POOL_SIZE 1024
+#endif
 #define UBASIC_MAX_GOSUB_STACK_DEPTH 10
 #define UBASIC_MAX_FOR_STACK_DEPTH 4
 #define UBASIC_VARIABLE_COUNT 26
+
+#ifndef UBASIC_HEAP_BYTES
+#define UBASIC_HEAP_BYTES 0
+#endif
 
 typedef struct for_state {
   int32_t line_after_for;
@@ -65,21 +85,40 @@ typedef struct for_state {
   int32_t to;
 } for_state;
 
-#define UBASIC_MEM_GOSUB_DEPTH_OFFSET 0
-#define UBASIC_MEM_FOR_DEPTH_OFFSET   4
-#define UBASIC_MEM_GOSUB_STACK_OFFSET 8
+/* Control state at low addresses */
+#define UBASIC_MEM_RESUME_OFFSET      0
+#define UBASIC_MEM_GOSUB_DEPTH_OFFSET 4
+#define UBASIC_MEM_FOR_DEPTH_OFFSET   8
+#define UBASIC_MEM_GOSUB_STACK_OFFSET 12
 #define UBASIC_MEM_FOR_STACK_OFFSET \
   (UBASIC_MEM_GOSUB_STACK_OFFSET + UBASIC_MAX_GOSUB_STACK_DEPTH * (int)sizeof(int32_t))
-#define UBASIC_MEM_VARIABLES_OFFSET \
-  (UBASIC_MEM_FOR_STACK_OFFSET + UBASIC_MAX_FOR_STACK_DEPTH * (int)sizeof(for_state))
+/* Program starts immediately after control structures */
 #define UBASIC_MEM_PROGRAM_OFFSET \
-  (UBASIC_MEM_VARIABLES_OFFSET + UBASIC_VARIABLE_COUNT * (int)sizeof(VARIABLE_TYPE))
+  (UBASIC_MEM_FOR_STACK_OFFSET + UBASIC_MAX_FOR_STACK_DEPTH * (int)sizeof(for_state))
 
-#define UBASIC_MIN_MEMORY_BYTES (UBASIC_MEM_PROGRAM_OFFSET + 1u)
+/* Variables and strings at TOP of memory (calculated at runtime) */
+#define UBASIC_VARIABLES_SIZE (UBASIC_VARIABLE_COUNT * (int)sizeof(VARIABLE_TYPE))
+#define UBASIC_STRING_STATE_SIZE ((int)sizeof(ubasic_string_state_t))
+
+/* These offsets are calculated from END of memory in ubasic_init */
+/* variables_mem = memory + (mem_bytes - UBASIC_VARIABLES_SIZE) */
+/* string_state  = memory + (mem_bytes - UBASIC_VARIABLES_SIZE - UBASIC_STRING_STATE_SIZE) */
+/* string pool grows DOWN from string_state toward program */
+
+#pragma pack(push, 1)
+typedef struct {
+  uint16_t pool_base;    /* Current top of string pool (grows DOWN) */
+  uint16_t pool_min;     /* Minimum address (below this is program) */
+  uint16_t var_off[UBASIC_VARIABLE_COUNT];  /* Absolute offsets in memory[] */
+} ubasic_string_state_t;
+#pragma pack(pop)
+
+#define UBASIC_MIN_MEMORY_BYTES \
+  (UBASIC_MEM_PROGRAM_OFFSET + 1u + UBASIC_HEAP_BYTES + UBASIC_VARIABLES_SIZE + UBASIC_STRING_STATE_SIZE)
 
 // Possibly public
 
-void ubasic_init(uint8_t *memory);
+void ubasic_init(uint8_t *memory, uint32_t memory_bytes);  /* Vars at top */
 void ubasic_reset(void);
 void ubasic_run(void);
 int ubasic_finished(void);

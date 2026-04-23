@@ -22,9 +22,9 @@
 
 static void run_program(void);
 static void add_line(const char *line);
-static void insert_char_array(const char *dest, const char *src, const char *position);
+static void insert_char_array(char *dest, const char *src, char *position);
 static int get_current_line_len(void);
-static void delete_char_array(const char *str, char *start, int numChars);
+static void delete_char_array(char *dest, char *position, int numChars);
 static int find_linenum(int linenum);
 
 #define MAX_LINE_LENGTH 255
@@ -34,7 +34,7 @@ static int find_linenum(int linenum);
 static char memory[MEMORY_SIZE];
 static char program[MAX_PROGRAM_SIZE];
 
-static char const *ptr, *nextptr, *startptr;
+static char *ptr, *nextptr, *startptr;
 
 /*---------------------------------------------------------------------------*/
 int main(int argc, char* argv[]) {
@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
     }
     buffer[bytes] = '\0';
     // Copy buffer to program
-    if ((bytes + 1) > MAX_PROGRAM_SIZE) {
+    if (bytes + 1 > MAX_PROGRAM_SIZE) {
       printf("Program file too large - terminating\n");
       return (-1);
     }
@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
 }
 /*---------------------------------------------------------------------------*/
 static void run_program(void) {
-    ubasic_init(memory);
+    ubasic_init(memory, MEMORY_SIZE);
     ubasic_load_program(program);
     while (!ubasic_finished()) {
         ubasic_run();
@@ -144,7 +144,7 @@ static void add_line(const char *line) {
 }
 
 /*---------------------------------------------------------------------------*/
-static void insert_char_array(const char *dest, const char *src, const char *position) {
+static void insert_char_array(char *dest, const char *src, char *position) {
   int destLen = strlen(dest);
   int srcLen = strlen(src);
 
@@ -164,7 +164,7 @@ static void insert_char_array(const char *dest, const char *src, const char *pos
   memcpy(dest + offset, src, srcLen);
 }
 /*---------------------------------------------------------------------------*/
-static void delete_char_array(const char *dest, char *position, int numChars) {
+static void delete_char_array(char *dest, char *position, int numChars) {
     int destLen = strlen(dest);
 
     // Ensure the start pointer is within bounds

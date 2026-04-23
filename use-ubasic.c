@@ -27,60 +27,31 @@
  * SUCH DAMAGE.
  *
  */
- 
-/*
- * Modified to support simple string variables and functions by David Mitchell
- * November 2008.
- * Changes and additions are marked 'string additions' throughout
- */
 
 #include "ubasic.h"
-#include <stdio.h>
-#include <errno.h>
 
-/*---------------------------------------------------------------------------*/
-// main routine modified to allow execution of BASIC script files 
+static const char program[] =
+"10 gosub 100\n\
+20 for i = 1 to 10\n\
+30 print i\n\
+40 next i\n\
+50 print \"end\"\n\
+60 end\n\
+100 print \"subroutine\"\n\
+110 return\n";
 
 /*---------------------------------------------------------------------------*/
 #define MEMORY_SIZE 4096
 
-int main(int argc, char **argv, char **envp)
-{
-  char *q;
-  char **p;
-  char *prog;
+int main(int argc, char* argv[]) {
+  
   char memory[MEMORY_SIZE];
-  char buffer[15000];
-  int infile;
-
-  if (argc > 1) {
-     p = argv + 1;
-     q = *p;
-	 while(*q == ' ') ++q;
- 
-     if ((infile = open(q,0)) == -1) {
-        printf("File \"%s\" not found in current directory - terminating\n",q);
-        return (-1);
-     }
-
-	 int bytes = read(infile,buffer,15000);
-     if (bytes < 0) {
-        printf("Error reading file \"%s\"  - terminating\n",q);
-        printf("Error was \"%d\" \n",errno);
-        return (-1);
-     }
-	 buffer[bytes] = '\0';
-     prog = buffer;
-  } else {
-    printf("Usage: ubasic fname\n  where fname is a file containing basic statements\n");
-    return (0);
-  }
-
   ubasic_init((uint8_t*)memory, MEMORY_SIZE);
-  ubasic_load_program(prog);
+  ubasic_load_program(program);
   do {
     ubasic_run();
   } while(!ubasic_finished());
 
   return 0;
 }
+/*---------------------------------------------------------------------------*/

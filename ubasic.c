@@ -60,6 +60,7 @@ static VARIABLE_TYPE expr(void);
 static void line_statement(void);
 static void statement(void);
 static void index_free(void);
+static void reset_control_state(void);
 static VARIABLE_TYPE expr(void);
 void set_variable(int varum, VARIABLE_TYPE value);
 VARIABLE_TYPE get_variable(int varnum);
@@ -73,7 +74,8 @@ static char const *program_ptr;
 static char string[MAX_STRINGLEN];
 
 static uint8_t *mem_base = NULL;
-
+static size_t mem_capacity_bytes = 0;
+static int32_t *resume_offset_cell = NULL;
 static int32_t *gosub_depth_cell = NULL;
 static int32_t *for_depth_cell = NULL;
 static int32_t *gosub_stack_mem = NULL;
@@ -81,13 +83,14 @@ static for_state *for_stack = NULL;
 static VARIABLE_TYPE *variables_mem = NULL;
 
 // string additions
-#define MAX_STRINGVARLEN 255
+#define MAX_STRINGVARLEN UBASIC_STRING_VAR_MAXLEN
 #define MAX_BUFFERLEN    4000
-#define GBGCHECK         3500
+#if UBASIC_STRING_POOL_SIZE > MAX_BUFFERLEN
+#error UBASIC_STRING_POOL_SIZE must not exceed MAX_BUFFERLEN (str_pool_compact scratch)
+#endif
 static char stringbuffer[MAX_BUFFERLEN];
 static int freebufptr = 0;
-#define MAX_SVARNUM 26
-static char *stringvariables[MAX_SVARNUM];
+#define MAX_SVARNUM UBASIC_VARIABLE_COUNT
 // end of string additions
 
 struct line_index {
@@ -111,8 +114,6 @@ static void index_free(void);
 peek_func peek_function = NULL;
 poke_func poke_function = NULL;
 
-static void garbage_collect(void);
-
 // string additions
 static char nullstring[] = "\0"; 
 static void  var_init(void);
@@ -125,39 +126,80 @@ static char* smid(const char *, int, int);
 static char* sstr(int);
 static char* schr(int);
 static int sinstr(int, const char*, const char*);
+static ubasic_string_state_t *str_state(void);
+static char *str_pool_data(void);
+static void str_pool_compact(void);
 // end of string additions
 
 /*---------------------------------------------------------------------------*/
 // Public functions
 /*---------------------------------------------------------------------------*/
-void ubasic_init(uint8_t *memory) {
+void ubasic_init(uint8_t *memory, uint32_t memory_bytes) {
+  size_t variables_offset;
+  size_t string_state_offset;
+  
   mem_base = memory;
+  mem_capacity_bytes = memory_bytes;
+  resume_offset_cell = (int32_t *)(memory + UBASIC_MEM_RESUME_OFFSET);
   gosub_depth_cell = (int32_t *)(memory + UBASIC_MEM_GOSUB_DEPTH_OFFSET);
   for_depth_cell = (int32_t *)(memory + UBASIC_MEM_FOR_DEPTH_OFFSET);
   gosub_stack_mem = (int32_t *)(memory + UBASIC_MEM_GOSUB_STACK_OFFSET);
   for_stack = (for_state *)(memory + UBASIC_MEM_FOR_STACK_OFFSET);
-  variables_mem = (VARIABLE_TYPE *)(memory + UBASIC_MEM_VARIABLES_OFFSET);
-  *gosub_depth_cell = 0;
-  *for_depth_cell = 0;
+  
+  /* Variables at TOP of memory */
+  variables_offset = memory_bytes - UBASIC_VARIABLES_SIZE;
+  variables_mem = (VARIABLE_TYPE *)(memory + variables_offset);
   memset(variables_mem, 0, UBASIC_VARIABLE_COUNT * sizeof(VARIABLE_TYPE));
+  
+  /* String state just below variables */
+  string_state_offset = variables_offset - UBASIC_STRING_STATE_SIZE;
+  
+  /* Initialize string state */
+  ubasic_string_state_t *str_st = (ubasic_string_state_t *)(memory + string_state_offset);
+  str_st->pool_base = (uint16_t)string_state_offset;  /* Start at top */
+  str_st->pool_min = UBASIC_MEM_PROGRAM_OFFSET + 1;   /* Can't grow below program start */
+  memset(str_st->var_off, 0, sizeof(str_st->var_off));
+  
   program_ptr = (char const *)(memory + UBASIC_MEM_PROGRAM_OFFSET);
   memory[UBASIC_MEM_PROGRAM_OFFSET] = '\0';
   index_free();
   tokenizer_init(program_ptr);
-  var_init(); // string addition
-  ended = 0;
   #if VERBOSE
-    DEBUG_PRINTF("ubasic_init: Initializing uBasic.\n");
+    DEBUG_PRINTF("ubasic_init: Variables at offset %zu (top of memory).\n", variables_offset);
+    DEBUG_PRINTF("ubasic_init: String state at offset %zu.\n", string_state_offset);
+    DEBUG_PRINTF("ubasic_init: String pool space: %zu bytes.\n", 
+                 string_state_offset - UBASIC_MEM_PROGRAM_OFFSET - 1);
   #endif
 }
 /*---------------------------------------------------------------------------*/
-void ubasic_init_peek_poke(uint8_t *memory, peek_func peek, poke_func poke) {
-  ubasic_init(memory);
+void ubasic_init_peek_poke(uint8_t *memory, uint32_t memory_bytes,peek_func peek, poke_func poke) {
+  ubasic_init(memory, memory_bytes);
   peek_function = peek;
   poke_function = poke;
   #if VERBOSE
     DEBUG_PRINTF("ubasic_init_peek_poke: Initializing uBasic with peek/poke.\n");
   #endif
+}
+/*---------------------------------------------------------------------------*/
+static void reset_control_state(void) {
+  index_free();
+  tokenizer_reset();
+  if (resume_offset_cell != NULL) {
+    *resume_offset_cell = 0;
+  }
+  if (gosub_depth_cell != NULL) {
+    *gosub_depth_cell = 0;
+  }
+  if (for_depth_cell != NULL) {
+    *for_depth_cell = 0;
+  }
+  if (gosub_stack_mem != NULL) {
+    memset(gosub_stack_mem, 0, UBASIC_MAX_GOSUB_STACK_DEPTH * sizeof(int32_t));
+  }
+  if (for_stack != NULL) {
+    memset(for_stack, 0, UBASIC_MAX_FOR_STACK_DEPTH * sizeof(for_state));
+  }
+  ended = 0;
 }
 /*---------------------------------------------------------------------------*/
 void ubasic_reset(void) {
@@ -172,27 +214,55 @@ void ubasic_reset(void) {
   ended = 0;
 
   #if VERBOSE
-    DEBUG_PRINTF("ubasic_reset: Resetting uBasic.\n");
+    DEBUG_PRINTF("ubasic_reset: Full reset including variables.\n");
   #endif
 }
 /*---------------------------------------------------------------------------*/
 void ubasic_load_program(const char *program) {
   size_t len;
+  size_t available_program_bytes;
+  size_t program_end;
+  size_t variables_offset;
+  size_t string_state_offset;
+  ubasic_string_state_t *str_st;
 
   if (mem_base == NULL) {
     DEBUG_PRINTF("ubasic_load_program: call ubasic_init first.\n");
     return;
   }
-  index_free();
+  
+  /* Reset control state but PRESERVE VARIABLES */
+  reset_control_state();
+  
   len = strlen(program);
+  
+  /* Calculate where things are in memory */
+  variables_offset = mem_capacity_bytes - UBASIC_VARIABLES_SIZE;
+  string_state_offset = variables_offset - UBASIC_STRING_STATE_SIZE;
+  program_end = UBASIC_MEM_PROGRAM_OFFSET + len + 1;
+  
+  /* Check program fits */
+  if (program_end > string_state_offset) {
+    DEBUG_PRINTF("ubasic_load_program: program too large (%u bytes, max %u).\n", 
+                 (unsigned)len, (unsigned)(string_state_offset - UBASIC_MEM_PROGRAM_OFFSET - 1));
+    return;
+  }
+  
+  /* Load program */
   memcpy(mem_base + UBASIC_MEM_PROGRAM_OFFSET, program, len + 1);
   program_ptr = (char const *)(mem_base + UBASIC_MEM_PROGRAM_OFFSET);
   tokenizer_init(program_ptr);
-  *gosub_depth_cell = 0;
-  *for_depth_cell = 0;
-  ended = 0;
+  
+  /* Reset string pool - it grows DOWN from string_state_offset toward program_end */
+  str_st = (ubasic_string_state_t *)(mem_base + string_state_offset);
+  str_st->pool_base = (uint16_t)string_state_offset;  /* Start at top */
+  str_st->pool_min = (uint16_t)program_end;            /* Can't grow below program */
+  memset(str_st->var_off, 0, sizeof(str_st->var_off));
+  
   #if VERBOSE
-    DEBUG_PRINTF("ubasic_load_program: Loaded program of length %u.\n", (unsigned)len);
+    DEBUG_PRINTF("ubasic_load_program: Loaded %u bytes.\n", (unsigned)len);
+    DEBUG_PRINTF("ubasic_load_program: String pool space: %u bytes.\n", 
+                 (unsigned)(string_state_offset - program_end));
   #endif
 }
 /*---------------------------------------------------------------------------*/
@@ -207,11 +277,47 @@ void ubasic_run(void){
     #endif
     return;
   }
-  // string additions
-  garbage_collect();
+  // string additions: repack string pool in memory[], then discard expr temporaries
+  str_pool_compact();
+  freebufptr = 0;
   // end of string additions
 
   line_statement();
+}
+/*---------------------------------------------------------------------------*/
+static void save_position(void) {
+  const char *current_pos = tokenizer_pos();
+  const char *start_pos = tokenizer_start();
+  int32_t offset = (int32_t)(current_pos - start_pos);
+  
+  if (resume_offset_cell != NULL) {
+    *resume_offset_cell = offset;
+    #if VERBOSE
+      DEBUG_PRINTF("save_position: Saved offset %d.\n", offset);
+    #endif
+  }
+}
+/*---------------------------------------------------------------------------*/
+void ubasic_resume(void) {
+  int32_t offset;
+  const char *start_pos;
+  const char *resume_pos;
+  
+  if (resume_offset_cell == NULL || program_ptr == NULL) {
+    DEBUG_PRINTF("ubasic_resume: Not initialized.\n");
+    return;
+  }
+  
+  offset = *resume_offset_cell;
+  start_pos = tokenizer_start();
+  resume_pos = start_pos + offset;
+  
+  tokenizer_goto(resume_pos);
+  ended = 0;
+  
+  #if VERBOSE
+    DEBUG_PRINTF("ubasic_resume: Resumed from offset %d.\n", offset);
+  #endif
 }
 /*---------------------------------------------------------------------------*/
 // Private functions
@@ -230,13 +336,119 @@ static void accept(int token){
 /*---------------------------------------------------------------------------*/
 // string additions
 /*---------------------------------------------------------------------------*/
+static ubasic_string_state_t *str_state(void) {
+  if (mem_base == NULL || mem_capacity_bytes == 0) {
+    return NULL;
+  }
+  size_t variables_offset = mem_capacity_bytes - UBASIC_VARIABLES_SIZE;
+  size_t string_state_offset = variables_offset - UBASIC_STRING_STATE_SIZE;
+  return (ubasic_string_state_t *)(mem_base + string_state_offset);
+}
+
+static char *str_pool_data(void) {
+  /* String pool is in the dynamic region, accessed via absolute offsets */
+  return (char *)mem_base;
+}
+
+static void str_pool_compact(void) {
+  ubasic_string_state_t *h;
+  uint16_t old_off[UBASIC_VARIABLE_COUNT];
+  uint16_t old_base;
+  uint16_t string_state_offset;
+  uint16_t newpos;
+  int i;
+  size_t total_size;
+
+  if (mem_base == NULL) {
+    return;
+  }
+  h = str_state();
+  if (h == NULL) {
+    return;
+  }
+  
+  /* Calculate string state offset */
+  string_state_offset = (uint16_t)(mem_capacity_bytes - UBASIC_VARIABLES_SIZE - UBASIC_STRING_STATE_SIZE);
+  
+  /* Save old offsets and copy all active strings to scratch buffer */
+  memcpy(old_off, h->var_off, sizeof(old_off));
+  old_base = h->pool_base;
+  
+  /* Copy active string data to scratch buffer */
+  if (old_base < string_state_offset) {
+    size_t used = string_state_offset - old_base;
+    if (used > MAX_BUFFERLEN) {
+      ended = 1;
+      return;
+    }
+    memcpy(stringbuffer, mem_base + old_base, used);
+  }
+  
+  /* Repack strings from TOP down (just below string_state) */
+  newpos = string_state_offset;
+  
+  for (i = 0; i < UBASIC_VARIABLE_COUNT; i++) {
+    uint16_t o = old_off[i];
+    const char *src;
+    size_t len;
+
+    if (o == 0) {
+      h->var_off[i] = 0;
+      continue;
+    }
+    
+    /* Validate old offset */
+    if (o < old_base || o >= string_state_offset) {
+      h->var_off[i] = 0;
+      continue;
+    }
+    
+    /* Get string from scratch buffer */
+    src = stringbuffer + (o - old_base);
+    len = strlen(src);
+    if (len > (size_t)MAX_STRINGVARLEN) {
+      len = (size_t)MAX_STRINGVARLEN;
+    }
+    
+    /* Check if we have space (growing down from newpos) */
+    if (newpos < h->pool_min + len + 1) {
+      DEBUG_PRINTF("str_pool_compact: Out of memory during compaction.\n");
+      ended = 1;
+      return;
+    }
+    
+    /* Allocate downward */
+    newpos -= (uint16_t)(len + 1);
+    memcpy(mem_base + newpos, src, len);
+    mem_base[newpos + len] = '\0';
+    h->var_off[i] = newpos;
+  }
+  
+  h->pool_base = newpos;
+  
+  #if VERBOSE
+    DEBUG_PRINTF("str_pool_compact: Compacted strings, new base=%u, freed %u bytes.\n",
+                 (unsigned)newpos, (unsigned)(newpos - old_base));
+  #endif
+}
+
 static void var_init() {
    int i;
+   ubasic_string_state_t *h;
+   size_t string_state_offset;
+
    freebufptr = 0;
    for (i=0; i<UBASIC_VARIABLE_COUNT; i++) 
       set_variable(i, 0);
-   for (i=0; i<MAX_SVARNUM; i++) 
-	   stringvariables[i] = scpy(nullstring);
+   if (mem_base != NULL && mem_capacity_bytes > 0) {
+     h = str_state();
+     if (h != NULL) {
+       string_state_offset = mem_capacity_bytes - UBASIC_VARIABLES_SIZE - UBASIC_STRING_STATE_SIZE;
+       h->pool_base = (uint16_t)string_state_offset;
+       h->pool_min = UBASIC_MEM_PROGRAM_OFFSET + 1;
+       memset(h->var_off, 0, sizeof(h->var_off));
+     }
+   }
 }
 /*---------------------------------------------------------------------------*/
 static int string_space_check(int l) {
@@ -248,33 +460,6 @@ static int string_space_check(int l) {
    }
    return i;
 }
-/*---------------------------------------------------------------------------*/
-static void garbage_collect() {
-  int totused = 0;
-  int i;
-  char *temp;
-  char *tp;
-  if (freebufptr < GBGCHECK)
-     return;
-  for (i=0; i< MAX_SVARNUM; i++) { // calculate used space
-     totused += strlen(stringvariables[i]) + 1;
-  }
-  DEBUG_PRINTF("Garbage collector called - reclaiming %d bytes\n", (freebufptr - totused));
-  temp = malloc(totused);	// alloc temporary space to store vars
-  tp = temp;
-  for (i=0; i< MAX_SVARNUM; i++) { // copy used strings to temporary store
-     strcpy(tp, stringvariables[i]);
-	 tp += strlen(tp) + 1;
-  }
-  freebufptr = 0;
-  tp = temp;
-  for (i=0; i< MAX_SVARNUM; i++) { //copy back to buffer
-     stringvariables[i] = scpy(tp);
-	 tp+= strlen(tp) + 1;
-  }
-  
-  free(temp); // free temp space
- }
 /*---------------------------------------------------------------------------*/
 static char* scpy(const char *s1) { // return a copy of s1
    int bp = freebufptr;
@@ -872,7 +1057,7 @@ static void let_statement(void){
 	 accept(TOKENIZER_STRINGVARIABLE);
      accept(TOKENIZER_EQ);
 	 set_stringvariable(var, sexpr());
-	 DEBUG_PRINTF("let_statement: string assign '%s' to %d\n", stringvariables[var], var);
+	 DEBUG_PRINTF("let_statement: string assign '%s' to %d\n", get_stringvariable(var), var);
 	 accept(TOKENIZER_LF);
 
   }
@@ -909,7 +1094,7 @@ static void return_statement(void){
 static void rem_statement(void) {
   accept(TOKENIZER_REM);
   DEBUG_PRINTF("rem_statement: Skipping comment.\n");
-  tokeniser_skip();
+  tokenizer_skip();
   if (tokenizer_token() == TOKENIZER_LF) {
     accept(TOKENIZER_LF);
   }
@@ -1077,18 +1262,82 @@ static VARIABLE_TYPE get_variable(int varnum){
 /*---------------------------------------------------------------------------*/
 // string additions
 /*---------------------------------------------------------------------------*/
-static void set_stringvariable(int svarnum, char *svalue) {
+void set_stringvariable(int svarnum, char *svalue) {
+  ubasic_string_state_t *h;
+  size_t len;
+  uint16_t need;
+  uint16_t new_base;
 
-    if(svarnum >=0 && svarnum <MAX_SVARNUM) {
-	   stringvariables[svarnum] = svalue;
-  	}
+  if (svalue == NULL || mem_base == NULL) {
+    return;
+  }
+  if (svarnum < 0 || svarnum >= MAX_SVARNUM) {
+    return;
+  }
+  h = str_state();
+  if (h == NULL) {
+    return;
+  }
+  
+  len = strlen(svalue);
+  if (len > (size_t)MAX_STRINGVARLEN) {
+    len = (size_t)MAX_STRINGVARLEN;
+  }
+  if (len == 0) {
+    h->var_off[svarnum] = 0;
+    return;
+  }
+  
+  need = (uint16_t)(len + 1);
+  
+  /* Check if we have space (growing downward from pool_base toward pool_min) */
+  if (h->pool_base < h->pool_min + need) {
+    DEBUG_PRINTF("set_stringvariable: Out of string memory (need %u bytes, have %u).\n",
+                 (unsigned)need, (unsigned)(h->pool_base - h->pool_min));
+    ended = 1;
+    return;
+  }
+  
+  /* Allocate downward */
+  new_base = h->pool_base - need;
+  memcpy(mem_base + new_base, svalue, len);
+  mem_base[new_base + len] = '\0';
+  h->var_off[svarnum] = new_base;  /* Store absolute offset */
+  h->pool_base = new_base;
+  
+  #if VERBOSE
+    DEBUG_PRINTF("set_stringvariable: Assigned '%s' to var %d at offset %u.\n", 
+                 svalue, svarnum, (unsigned)new_base);
+  #endif
 }
 /*---------------------------------------------------------------------------*/
-static char* get_stringvariable(int varnum){
-  if(varnum>=0 && varnum< MAX_SVARNUM) {
-      return stringvariables[varnum];
+char *get_stringvariable(int varnum) {
+  ubasic_string_state_t *h;
+  uint16_t o;
+  size_t string_state_offset;
+
+  if (varnum < 0 || varnum >= MAX_SVARNUM || mem_base == NULL) {
+    return scpy(nullstring);
   }
-  return scpy(nullstring);
+  h = str_state();
+  if (h == NULL) {
+    return scpy(nullstring);
+  }
+  
+  o = h->var_off[varnum];
+  if (o == 0) {
+    /* Return empty string at pool_base (position 0 of pool_data) */
+    return (char *)mem_base;  /* Points to empty string at offset 0 */
+  }
+  
+  /* Validate offset is within pool bounds */
+  string_state_offset = mem_capacity_bytes - UBASIC_VARIABLES_SIZE - UBASIC_STRING_STATE_SIZE;
+  if (o < h->pool_min || o >= string_state_offset) {
+    DEBUG_PRINTF("get_stringvariable: Invalid offset %u for var %d.\n", (unsigned)o, varnum);
+    return scpy(nullstring);
+  }
+  
+  return (char *)(mem_base + o);
 }
 /*---------------------------------------------------------------------------*/
 static int32_t gosub_pop(void) {
