@@ -45,23 +45,27 @@
 
 typedef VARIABLE_TYPE (*peek_func)(VARIABLE_TYPE);
 typedef void (*poke_func)(VARIABLE_TYPE, VARIABLE_TYPE);
+typedef void (*out_func)(const char *);
+typedef void (*put_func)(VARIABLE_TYPE);
+typedef VARIABLE_TYPE (*in_func)(void);
+typedef VARIABLE_TYPE (*get_func)(void);
 
 /*
- * Single buffer layout - 8-bit OS style with variables at top:
+ * Single buffer layout - Classic 8-bit BASIC style:
  *   LOW MEMORY:
  *     int32_t resume_offset at offset 0 (tokenizer position for resume)
  *     int32_t gosub_depth at offset 4
  *     int32_t for_depth at offset 8
  *     int32_t gosub_stack[UBASIC_MAX_GOSUB_STACK_DEPTH]
  *     struct for_state for_stack[UBASIC_MAX_FOR_STACK_DEPTH]
- *     program bytes (NUL-terminated, grows upward)
+ *     program bytes (NUL-terminated)
+ *     VARIABLE_TYPE variables[UBASIC_VARIABLE_COUNT]  (a-z integer variables)
+ *     ubasic_string_state_t  (pool_base, pool_min + var_off[26] string descriptors)
  *   
  *   DYNAMIC SPACE (string pool grows down from high memory during runtime)
  *   
  *   HIGH MEMORY (grows down from top):
  *   char string_pool[]  (variable size, grows DOWN during runtime)
- *   ubasic_string_state_t  (pool_base, pool_min + var_off[26])
- *   VARIABLE_TYPE variables[UBASIC_VARIABLE_COUNT]  (a-z)
  *
  * String pool is reset on program load and grows downward during execution.
  * UBASIC_STRING_POOL_SIZE is now ignored (pool uses all available space).
@@ -81,7 +85,7 @@ typedef void (*poke_func)(VARIABLE_TYPE, VARIABLE_TYPE);
 
 typedef struct for_state {
   int32_t line_after_for;
-  int32_t for_variable_index; /* 0..51 (a-z then A-Z) */
+  int32_t for_variable_index; /* 0..26 (a-z) */
   int32_t to;
 } for_state;
 
@@ -96,14 +100,14 @@ typedef struct for_state {
 #define UBASIC_MEM_PROGRAM_OFFSET \
   (UBASIC_MEM_FOR_STACK_OFFSET + UBASIC_MAX_FOR_STACK_DEPTH * (int)sizeof(for_state))
 
-/* Variables and strings at TOP of memory (calculated at runtime) */
+/* Variables and string state in LOW memory after program (calculated at runtime) */
 #define UBASIC_VARIABLES_SIZE (UBASIC_VARIABLE_COUNT * (int)sizeof(VARIABLE_TYPE))
 #define UBASIC_STRING_STATE_SIZE ((int)sizeof(ubasic_string_state_t))
 
-/* These offsets are calculated from END of memory in ubasic_init */
-/* variables_mem = memory + (mem_bytes - UBASIC_VARIABLES_SIZE) */
-/* string_state  = memory + (mem_bytes - UBASIC_VARIABLES_SIZE - UBASIC_STRING_STATE_SIZE) */
-/* string pool grows DOWN from string_state toward program */
+/* These offsets are calculated in ubasic_init and ubasic_load_program */
+/* variables_mem = memory + (program_end) */
+/* string_state  = memory + (program_end + UBASIC_VARIABLES_SIZE) */
+/* string pool grows DOWN from HIGH memory toward string_state */
 
 #pragma pack(push, 1)
 typedef struct {
@@ -118,15 +122,21 @@ typedef struct {
 
 // Possibly public
 
-void ubasic_init(uint8_t *memory, uint32_t memory_bytes);  /* Vars at top */
-void ubasic_reset(void);
+void ubasic_init(uint8_t *memory, uint32_t memory_bytes);  /* Minimal init for snapshot restore */
+void ubasic_reset(void);  /* Clears variables */
 void ubasic_run(void);
 int ubasic_finished(void);
-void ubasic_load_program(const char *program);
+void ubasic_load_program(const char *program); /* Preserves vars */
 
 // string addition
 char* get_stringvariable(int);
 void set_stringvariable(int, char *);
 // end of string addition
+
+/* I/O function setter */
+void ubasic_set_out_function(out_func func);
+void ubasic_set_put_function(put_func func);
+void ubasic_set_in_function(in_func func);
+void ubasic_set_get_function(get_func func);
 
 #endif /* __UBASIC_H__ */

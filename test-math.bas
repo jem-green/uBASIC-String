@@ -1,9 +1,8 @@
-1 print "start of test"
-10 gosub 100
-20 for i = 1 to 10
-30 print i
-40 next i
-50 print "end of test"
-60 end
-100 print "subroutine"
-110 return
+1 PRINT "start of test"
+10 LET a = 1
+20 LET b = 2
+30 PRINT "addition=";a+b
+30 PRINT "subtraction=";b-a
+40 PRINT "multipcation=";a*b
+50 PRINT "division=";b/a
+60 END 

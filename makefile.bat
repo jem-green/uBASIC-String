@@ -1,1 +1,3 @@
-cl /Feubasic cli-ubasic.c ubasic.c tokenizer.c
+call makefile_cli.bat
+call makefile_run.bat
+call makefile_use.bat

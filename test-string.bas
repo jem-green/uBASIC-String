@@ -1,26 +1,26 @@
-1 print "start of test"
-2 let a$= "abcdefghi"
+1 PRINT "start of test"
+2 LET a$= "abcdefghi"
 3 b$="123456789"
-5 print "Length of a$=", len(a$)
-6 print "Length of b$=", len(b$)
-7 if len(a$) = len(b$) then print "same length"
-8 if (a$ = b$) then print "same string"
-9 c$=left$(a$+ b$,12)
-10 print c$
-11 c$=right$(a$+b$, 12)
-12 print c$
-13 c$=mid$(a$+b$, 8,8)
-14 print c$
-15 c$=str$(13+42)
-16 print c$
-17 print len(c$)
-18 print len("this" + "that")
-19 c$ = chr$(34)
-20 print c$
-21 j = asc(c$)
-22 print j
-23 print val("12345")
-24 i=instr(3, "123456789", "67")
-24 print "position of '67' in '123456789' is", i
-25 print mid$(a$,2,2)+"xyx"
-30 print "end of test"
+5 PRINT "Length of a$=", LEN(a$)
+6 PRINT "Length of b$=", LEN(b$)
+7 IF LEN(a$) = LEN(b$) THEN PRINT "same length"
+8 IF (a$ = b$) THEN PRINT "same string"
+9 c$=LEFT$(a$+ b$,12)
+10 PRINT c$
+11 c$=RIGHT$(a$+b$, 12)
+12 PRINT c$
+13 c$=MID$(a$+b$, 8,8)
+14 PRINT c$
+15 c$=STR$(13+42)
+16 PRINT c$
+17 PRINT LEN(c$)
+18 PRINT LEN("this" + "that")
+19 c$ = CHR$(34)
+20 PRINT c$
+21 j = ASC(c$)
+22 PRINT j
+23 PRINT VAL("12345")
+24 i=INSTR(3, "123456789", "67")
+24 PRINT "position of '67' in '123456789' is", i
+25 PRINT MID$(a$,2,2)+"xyx"
+30 PRINT "end of test"

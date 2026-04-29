@@ -1,9 +1,9 @@
-1 print "start of test"
-10 gosub 100
-20 for i = 1 to 10
-30 print i
-40 next i
-50 print "end"
-60 end
-100 print "subroutine"
-110 return
+1 PRINT "start of test"
+10 GOSUB 100
+20 FOR i = 1 TO 10
+30 PRINT i
+40 NEXT i
+50 PRINT "end"
+60 END
+100 PRINT "subroutine"
+110 RETURN
