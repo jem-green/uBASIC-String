@@ -25,7 +25,7 @@ static void add_line(const char *line);
 static void insert_char_array(char *dest, const char *src, char *position);
 static int get_current_line_len(void);
 static void delete_char_array(char *dest, char *position, int numChars);
-static int find_linenum(int linenum);
+static uint32_t find_linenum(uint32_t linenum);
 
 #define MAX_LINE_LENGTH 255
 #define MEMORY_SIZE 8192
@@ -106,26 +106,26 @@ static void run_program(void) {
 static void add_line(const char *line) {
 
   startptr = program;
-  int linenum;
+  uint32_t linenum;
   static char const *lineptr;
   lineptr = line;
-  linenum = atoi(lineptr);
+  linenum = (uint32_t)strtoul(lineptr, NULL, 10);
   int linelen = strlen(line);
   
   // want to check if the new line has content
   
   if (linenum > 0) {
-    DEBUG_PRINTF("add_line: Add inputted line number %d\n", linenum);
+    DEBUG_PRINTF("add_line: Add inputted line number %u\n", linenum);
     // Problem with find_linenumber of there are no line number
     // ptr returns pointing to the end of the previous lineno being
     // search for.
-    int r = find_linenum(linenum);
-    DEBUG_PRINTF("add_line: Found line number %d\n", r);
+    uint32_t r = find_linenum(linenum);
+    DEBUG_PRINTF("add_line: Found line number %u\n", r);
     if (linenum != r) {
-      DEBUG_PRINTF("add_line: Insert new line %d\n",linenum);
+      DEBUG_PRINTF("add_line: Insert new line %u\n",linenum);
       insert_char_array(startptr, line, ptr);
     } else {
-      DEBUG_PRINTF("add_line: replace existing line %d\n",linenum);
+      DEBUG_PRINTF("add_line: replace existing line %u\n",linenum);
       int numChars = 0;
       numChars = get_current_line_len();
       DEBUG_PRINTF("add_line: numchars %d\n",numChars);
@@ -186,23 +186,23 @@ static void delete_char_array(char *dest, char *position, int numChars) {
 }
 
 /*---------------------------------------------------------------------------*/
-static int find_linenum(int linenum) {
+static uint32_t find_linenum(uint32_t linenum) {
   #if DEBUG 
 	#if VERBOSE
     DEBUG_PRINTF("find_linenum: enter.\n");
  	#endif
 	#endif 
-  int currentLinenum;
+  uint32_t currentLinenum;
   ptr = program;
-  currentLinenum = atoi(ptr);
-  while ((atoi(ptr) < linenum) && (*ptr != 0)) {
+  currentLinenum = (uint32_t)strtoul(ptr, NULL, 10);
+  while ((strtoul(ptr, NULL, 10) < linenum) && (*ptr != 0)) {
     #if DEBUG
     #if VERBOSE
-      DEBUG_PRINTF("find_linenum: Current line %d.\n", atoi(ptr));
+      DEBUG_PRINTF("find_linenum: Current line %u.\n", (uint32_t)strtoul(ptr, NULL, 10));
     #endif
     #endif
 
-    currentLinenum = atoi(ptr);
+    currentLinenum = (uint32_t)strtoul(ptr, NULL, 10);
 
     // Move to the end of the line
     // or end of the file
@@ -213,16 +213,16 @@ static int find_linenum(int linenum) {
     ptr++;
 
     // Prevent replacing the last found linenum if end of file.
-    if (atoi(ptr) > 0) {
-      currentLinenum = atoi(ptr);
+    if (strtoul(ptr, NULL, 10) > 0) {
+      currentLinenum = (uint32_t)strtoul(ptr, NULL, 10);
     }
     #if DEBUG
     #if VERBOSE
-      DEBUG_PRINTF("find_linenum: next Line %d.\n", currentLinenum);
+      DEBUG_PRINTF("find_linenum: next Line %u.\n", currentLinenum);
     #endif
     #endif
   }
-  DEBUG_PRINTF("find_linenum: Found line %d.\n", currentLinenum);
+  DEBUG_PRINTF("find_linenum: Found line %u.\n", currentLinenum);
   return(currentLinenum);
 }
 

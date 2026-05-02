@@ -84,8 +84,8 @@ typedef VARIABLE_TYPE (*get_func)(void);
 #endif
 
 typedef struct for_state {
-  int32_t line_after_for;
-  int32_t for_variable_index; /* 0..26 (a-z) */
+  uint32_t line_after_for;
+  int32_t for_variable_index; /* 0..25 (a-z) */
   int32_t to;
 } for_state;
 
@@ -127,6 +127,7 @@ void ubasic_reset(void);  /* Clears variables */
 void ubasic_run(void);
 int ubasic_finished(void);
 void ubasic_load_program(const char *program); /* Preserves vars */
+void ubasic_resume(void);  /* Resume from saved position in memory */
 
 // string addition
 char* get_stringvariable(int);

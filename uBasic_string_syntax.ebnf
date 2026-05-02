@@ -1,0 +1,61 @@
+program = line , { line } ;
+line = line_number , statement , eol ;
+line_number = digit , { digit } ;
+digit = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "0" ;
+eol =  ( cr , lf ) | cr ;
+number = integer ;
+integer = digit , { digit } ;
+cr = "\n" ; 
+lf = "\f" ;
+letter =  ucase | lcase;
+ucase = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z" ;
+lcase = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" ;
+character = letter | digit | symbol ;
+symbol =  "|" | " " | "!" | "#" | "$" | "%" | "&" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "\" | "]" | "^" | "_" | "`" | "{" | "}" | "~" ;
+statement = end_statement | for_statement | gosub_statement | goto_statement | if_statement | let_statement | next_statement | peek_statement | poke_statement | print_statement | rem_statement | return_statement ;
+end_statement = "END" ;
+for_statement = "FOR" , numeric_variable , "=" , expression , "TO" , expression ;
+gosub_statement = "GOSUB" , line_number ;
+goto_statement = "GOTO" , line_number ;
+if_statement = "IF" , relation , "THEN" , statement ;
+let_statement = [ "LET" ] , variable , "=" , expression ;
+next_statement = "NEXT" , numeric_variable ;
+peek_statement = "PEEK" , expression , "," , numeric_variable ;
+poke_statement = "POKE" , expression , "," , expression ;
+print_statement = "PRINT" , list , { ( "," | ";" ) , list } ;
+list = string_expression | expression ;
+rem_statement = "REM" , [ remark ] ;
+return_statement = "RETURN" ;
+remark = { character } ;
+relation = expression , relop , expression ;
+relop = "<" | ">" | "=" ;
+variable = numeric_variable | string_variable ;
+numeric_variable = lcase ;
+string_variable = lcase , "$" ;
+expression = term , { addop , term } ;
+addop = "+" | "-" ;
+term = factor , { mulop , factor } ;
+mulop = "*" | "/" ;
+factor = number | numeric_variable | numeric_function | "(" , expression , ")" ;
+string_expression = string_term , { "+" , string_term } ;
+string_term = string_literal | string_variable | string_function ;
+string_literal = '"' , { character } , '"' ;
+numeric_function = len_function | val_function | asc_function | instr_function ;
+len_function   = "LEN"   , "(" , string_expression , ")" ;
+val_function   = "VAL"   , "(" , string_expression , ")" ;
+asc_function   = "ASC"   , "(" , string_expression , ")" ;
+instr_function = "INSTR" , "(" , [ expression , "," ] , string_expression , "," , string_expression , ")" ;
+string_function = left_function | right_function | mid_function | str_function | chr_function ;
+left_function  = "LEFT$"  , "(" , string_expression , "," , expression , ")" ;
+right_function = "RIGHT$" , "(" , string_expression , "," , expression , ")" ;
+mid_function   = "MID$"   , "(" , string_expression , "," , expression , [ "," , expression ] , ")" ;
+str_function   = "STR$"   , "(" , expression , ")" ;
+chr_function   = "CHR$"   , "(" , expression , ")" ;
+	
+(* Notes:
+   - Numbers are integers only; no floating point.
+   - Numeric variables are single lowercase letters (a-z); uppercase is not valid.
+   - String variables are a single lowercase letter followed by "$" (e.g. a$).
+   - Strings are delimited by double quotes and are not allowed to contain newline.
+   - The interpreter expects each statement to end with a line feed (LF).
+*)

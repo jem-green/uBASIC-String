@@ -31,6 +31,8 @@
 #ifndef __VARTYPE_H__
 #define __VARTYPE_H__
 
-#define VARIABLE_TYPE char
+#include <stdint.h>
+
+#define VARIABLE_TYPE int32_t
 
 #endif /* __VARTYPE_H__ */

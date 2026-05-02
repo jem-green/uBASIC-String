@@ -64,8 +64,8 @@ static void reset_control_state(void);
 static VARIABLE_TYPE expr(void);
 void set_variable(int varum, VARIABLE_TYPE value);
 VARIABLE_TYPE get_variable(int varnum);
-static void gosub_push(int32_t line_num);
-static int32_t gosub_pop(void);
+static void gosub_push(uint32_t line_num);
+static uint32_t gosub_pop(void);
 static void for_push(for_state state);
 static for_state for_pop(void);
 
@@ -95,7 +95,7 @@ static int freebufptr = 0;
 // end of string additions
 
 struct line_index {
-  int line_number;
+  uint32_t line_number;
   char const *program_text_position;
   struct line_index *next;
 };
@@ -120,7 +120,7 @@ static void default_out_function(const char *message) {
   printf("%s", message);
 }
 
-out_func out_function = default_out_function;
+out_func out_function = default_out_function;  /* Default to printf wrapper */
 put_func put_function = NULL;
 in_func in_function = NULL;
 get_func get_function = NULL;
@@ -321,8 +321,8 @@ void ubasic_resume(void) {
 static void accept(int token){
   if(token != tokenizer_token()) {
     DEBUG_PRINTF("accept: Token not what was expected (expected '%s', got %s).\n",
-    tokenizer_token_name(token),
-    tokenizer_token_name(tokenizer_token()));
+	tokenizer_token_name(token),
+	tokenizer_token_name(tokenizer_token()));
     tokenizer_error_print();
     exit(1);
   }
@@ -763,8 +763,7 @@ static int term(void) {
    op = tokenizer_token();
    DEBUG_PRINTF("term: token '%s'.\n", tokenizer_token_name(op));
    while(op == TOKENIZER_ASTR ||
-     op == TOKENIZER_SLASH ||
-     op == TOKENIZER_MOD) {
+     op == TOKENIZER_SLASH) {
      tokenizer_next();
      f2 = factor();
      DEBUG_PRINTF("term: %d %d %d\n", f1, op, f2);
@@ -774,9 +773,6 @@ static int term(void) {
         break;
        case TOKENIZER_SLASH:
         f1 = f1 / f2;
-        break;
-       case TOKENIZER_MOD:
-        f1 = f1 % f2;
         break;
      }
      op = tokenizer_token();
@@ -789,14 +785,27 @@ static int term(void) {
 static VARIABLE_TYPE expr(void){
   int t1, t2;
   int op;
+  int unary_minus = 0;
+  
+  /* Handle unary + or - */
+  if (tokenizer_token() == TOKENIZER_PLUS) {
+    accept(TOKENIZER_PLUS);
+  } else if (tokenizer_token() == TOKENIZER_MINUS) {
+    accept(TOKENIZER_MINUS);
+    unary_minus = 1;
+  }
 
   t1 = term();
+  
+  /* Apply unary minus if present */
+  if (unary_minus) {
+    t1 = -t1;
+  }
+  
   op = tokenizer_token();
   DEBUG_PRINTF("expr: token %s.\n", tokenizer_token_name(op));
   while(op == TOKENIZER_PLUS ||
-       op == TOKENIZER_MINUS ||
-       op == TOKENIZER_AND ||
-       op == TOKENIZER_OR) {
+       op == TOKENIZER_MINUS) {
     tokenizer_next();
     t2 = term();
     DEBUG_PRINTF("expr: %d %d %d.\n", t1, op, t2);
@@ -806,12 +815,6 @@ static VARIABLE_TYPE expr(void){
       break;
     case TOKENIZER_MINUS:
       t1 = t1 - t2;
-      break;
-    case TOKENIZER_AND:
-      t1 = t1 & t2;
-      break;
-    case TOKENIZER_OR:
-      t1 = t1 | t2;
       break;
     }
     op = tokenizer_token();
@@ -854,7 +857,7 @@ static void index_free(void) {
   if(line_index_head != NULL) {
     line_index_current = line_index_head;
     do {
-      DEBUG_PRINTF("index_free: Freeing index for line %d.\n", line_index_current->line_number);
+      DEBUG_PRINTF("index_free: Freeing index for line %u.\n", line_index_current->line_number);
       line_index_head = line_index_current;
       line_index_current = line_index_current->next;
       free(line_index_head);
@@ -863,7 +866,7 @@ static void index_free(void) {
   }
 }
 /*---------------------------------------------------------------------------*/
-static char const* index_find(int linenum) {
+static char const* index_find(uint32_t linenum) {
   struct line_index *lidx;
   lidx = line_index_head;
 
@@ -877,7 +880,7 @@ static char const* index_find(int linenum) {
     #if DEBUG
     	#if VERBOSE
       		if(lidx != NULL) {
-        		DEBUG_PRINTF("index_find: Step %3d. Found index for line %d: %p.\n",
+        		DEBUG_PRINTF("index_find: Step %3d. Found index for line %u: %td.\n",
         		step,
         		lidx->line_number,
         		lidx->program_text_position - tokenizer_start());
@@ -889,7 +892,7 @@ static char const* index_find(int linenum) {
   if(lidx != NULL && lidx->line_number == linenum) {
     #if DEBUG
     	#if VERBOSE
-      		DEBUG_PRINTF("index_find: Returning index for line %d.\n", linenum);
+      		DEBUG_PRINTF("index_find: Returning index for line %u.\n", linenum);
     	#endif
     #endif
     return lidx->program_text_position;
@@ -898,7 +901,7 @@ static char const* index_find(int linenum) {
   return NULL;
 }
 /*---------------------------------------------------------------------------*/
-static void index_add(int linenum, char const* sourcepos) {
+static void index_add(uint32_t linenum, char const* sourcepos) {
   if(line_index_head != NULL && index_find(linenum)) {
     return;
   }
@@ -919,48 +922,44 @@ static void index_add(int linenum, char const* sourcepos) {
   }
   #if DEBUG
   	#if VERBOSE
-		DEBUG_PRINTF("index_add: Adding index for line %d: %p.\n", linenum,
+		DEBUG_PRINTF("index_add: Adding index for line %u: %td.\n", linenum,
 			sourcepos - tokenizer_start());
 		#endif
 	#endif
 }
 /*---------------------------------------------------------------------------*/
-static void jump_linenum_slow(int linenum) {
+static void jump_linenum_slow(uint32_t linenum) {
+  DEBUG_PRINTF("jump_linenum_slow:");
   tokenizer_init(program_ptr);
-  while(tokenizer_num() != linenum) {
+  while(tokenizer_linenum() != linenum) {
     do {
-      do {
-        tokenizer_next();
-      } while(tokenizer_token() != TOKENIZER_LF &&
-          tokenizer_token() != TOKENIZER_ENDOFINPUT);
-      if(tokenizer_token() == TOKENIZER_LF) {
-        tokenizer_next();
-      }
-    } while(tokenizer_token() != TOKENIZER_NUMBER);
+      tokenizer_skip();
+    } while(tokenizer_token() != TOKENIZER_NUMBER &&
+            tokenizer_token() != TOKENIZER_ENDOFINPUT);
 	#if DEBUG
       #if VERBOSE
-        DEBUG_PRINTF("jump_linenum_slow: Found line %d.\n", tokenizer_num());
+        DEBUG_PRINTF("jump_linenum_slow: Found line %u.\n", tokenizer_linenum());
 	  #endif
 	#endif
   }
 }
 /*---------------------------------------------------------------------------*/
-static void jump_linenum(int linenum) {
+static void jump_linenum(uint32_t linenum) {
   char const* pos = index_find(linenum);
   if(pos != NULL) {
-    DEBUG_PRINTF("jump_linenum: Going to line %d.\n", linenum);
+    DEBUG_PRINTF("jump_linenum: Going to line %u.\n", linenum);
     tokenizer_goto(pos);
   } else {
     /* We'll try to find a yet-unindexed line to jump to. */
-    DEBUG_PRINTF("jump_linenum: Calling jump_linenum_slow for line %d.\n", linenum);
+    DEBUG_PRINTF("jump_linenum: Calling jump_linenum_slow for line %u.\n", linenum);
     jump_linenum_slow(linenum);
   }
 }
 /*---------------------------------------------------------------------------*/
 static void goto_statement(void) {
   accept(TOKENIZER_GOTO);
-  DEBUG_PRINTF("jump_linenum: goto.\n");
-  jump_linenum(tokenizer_num());
+  DEBUG_PRINTF("goto_statement: goto.\n");
+  jump_linenum(tokenizer_linenum());
 }
 /*---------------------------------------------------------------------------*/
 static void print_statement(void) {
@@ -1019,13 +1018,9 @@ static void if_statement(void){
   } else {
     do {
       tokenizer_next();
-    } while(tokenizer_token() != TOKENIZER_ELSE &&
-        tokenizer_token() != TOKENIZER_LF &&
+    } while(tokenizer_token() != TOKENIZER_LF &&
         tokenizer_token() != TOKENIZER_ENDOFINPUT);
-    if(tokenizer_token() == TOKENIZER_ELSE) {
-      tokenizer_next();
-      statement();
-    } else if(tokenizer_token() == TOKENIZER_LF) {
+    if(tokenizer_token() == TOKENIZER_LF) {
       tokenizer_next();
     }
   }
@@ -1056,17 +1051,20 @@ static void let_statement(void){
 }
 /*---------------------------------------------------------------------------*/
 static void gosub_statement(void) {
-  int linenum;
+  uint32_t target_line;
+  uint32_t return_line;
   accept(TOKENIZER_GOSUB);
-  linenum = tokenizer_num();
+  target_line = tokenizer_linenum();
   accept(TOKENIZER_NUMBER);
   accept(TOKENIZER_LF);
+  
+  /* After LF, tokenizer is positioned at the next line number */
+  return_line = tokenizer_linenum();
+  
   if(*gosub_depth_cell < UBASIC_MAX_GOSUB_STACK_DEPTH) {
-
-    /* Push the current return line into the configured gosub stack (memory or internal). */
-    gosub_push(tokenizer_num());
-
-    jump_linenum(linenum);
+    /* Push the return line into the gosub stack */
+    gosub_push(return_line);
+    jump_linenum(target_line);
   } else {
     DEBUG_PRINTF("gosub_statement: gosub stack exhausted.\n");
   }
@@ -1075,7 +1073,7 @@ static void gosub_statement(void) {
 static void return_statement(void){
   accept(TOKENIZER_RETURN);
   if(*gosub_depth_cell > 0) {
-    int32_t retline = gosub_pop();
+    uint32_t retline = gosub_pop();
     jump_linenum(retline);
   } else {
     DEBUG_PRINTF("return_statement: non-matching return.\n");
@@ -1130,12 +1128,19 @@ static void for_statement(void) {
   accept(TOKENIZER_LF);
 
   for_state st;
-  st.line_after_for = (int32_t)tokenizer_num();
+  if(tokenizer_token() == TOKENIZER_NUMBER) {
+    st.line_after_for = tokenizer_linenum();
+  } else {
+    DEBUG_PRINTF("for_statement: ERROR - Expected NUMBER token after LF, got %s\n",
+                 tokenizer_token_name(tokenizer_token()));
+    st.line_after_for = 0;
+  }
   st.for_variable_index = (int32_t)for_variable;
   st.to = (int32_t)to;
   for_push(st);
   #if VERBOSE
-    DEBUG_PRINTF("for_statement: new for, var %d to %d.\n", (int)st.for_variable_index, (int)st.to);
+    DEBUG_PRINTF("for_statement: new for, var %d to %d, line_after_for=%u.\n",
+                 (int)st.for_variable_index, (int)st.to, st.line_after_for);
   #endif
   
 }
@@ -1234,9 +1239,9 @@ static void line_statement(void){
   save_position();
   
   #if VERBOSE
-    DEBUG_PRINTF("----------- Line number %d ---------\n", tokenizer_num());
+    DEBUG_PRINTF("----------- Line number %u ---------\n", tokenizer_linenum());
   #endif
-  index_add(tokenizer_num(), tokenizer_pos());
+  index_add(tokenizer_linenum(), tokenizer_pos());
   accept(TOKENIZER_NUMBER);
   statement();
 }
@@ -1337,7 +1342,7 @@ char *get_stringvariable(int varnum) {
 /*---------------------------------------------------------------------------*/
 // end of string additions
 /*---------------------------------------------------------------------------*/
-static int32_t gosub_pop(void) {
+static uint32_t gosub_pop(void) {
   int32_t ptr = *gosub_depth_cell;
   if (ptr == 0) {
     DEBUG_PRINTF("gosub_pop: underflow (ptr=0)\n");
@@ -1348,7 +1353,7 @@ static int32_t gosub_pop(void) {
   return gosub_stack_mem[ptr];
 }
 /*---------------------------------------------------------------------------*/
-static void gosub_push(int32_t line_num) {
+static void gosub_push(uint32_t line_num) {
   int32_t ptr = *gosub_depth_cell;
   if (ptr >= UBASIC_MAX_GOSUB_STACK_DEPTH) {
     DEBUG_PRINTF("gosub_push: overflow (ptr=%d)\n", (int)ptr);

@@ -47,10 +47,11 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 static char const *ptr, *nextptr, *startptr;
 
-#define MAX_NUMLEN 6
+#define MAX_NUMLEN 11  // Max 10 digits for uint32_t (4294967295) plus 1
 
 struct keyword_token {
   char *keyword;
@@ -77,7 +78,7 @@ static const struct keyword_token keywords[] = {
   {"PRINT", TOKENIZER_PRINT},
   {"IF", TOKENIZER_IF},
   {"THEN", TOKENIZER_THEN},
-  {"ELSE", TOKENIZER_ELSE},
+
   {"FOR", TOKENIZER_FOR},
   {"TO", TOKENIZER_TO},
   {"NEXT", TOKENIZER_NEXT},
@@ -113,7 +114,7 @@ static const struct keyword_token tokens[] = {
 	{"TOKENIZER_PRINT",TOKENIZER_PRINT},
 	{"TOKENIZER_IF",TOKENIZER_IF},
 	{"TOKENIZER_THEN",TOKENIZER_THEN},
-	{"TOKENIZER_ELSE",TOKENIZER_ELSE},
+
 	{"TOKENIZER_FOR",TOKENIZER_FOR},
 	{"TOKENIZER_TO",TOKENIZER_TO},
 	{"TOKENIZER_NEXT",TOKENIZER_NEXT},
@@ -129,11 +130,8 @@ static const struct keyword_token tokens[] = {
 	{"TOKENIZER_SEMICOLON",TOKENIZER_SEMICOLON},
 	{"TOKENIZER_PLUS",TOKENIZER_PLUS},
 	{"TOKENIZER_MINUS",TOKENIZER_MINUS},
-	{"TOKENIZER_AND",TOKENIZER_AND},
-	{"TOKENIZER_OR",TOKENIZER_OR},
 	{"TOKENIZER_ASTR",TOKENIZER_ASTR},
 	{"TOKENIZER_SLASH",TOKENIZER_SLASH},
-	{"TOKENIZER_MOD",TOKENIZER_MOD},
 	{"TOKENIZER_HASH",TOKENIZER_HASH},
 	{"TOKENIZER_LEFTPAREN",TOKENIZER_LEFTPAREN},
 	{"TOKENIZER_RIGHTPAREN",TOKENIZER_RIGHTPAREN},
@@ -156,16 +154,10 @@ static int singlechar(void){
     return TOKENIZER_PLUS;
   } else if(*ptr == '-') {
     return TOKENIZER_MINUS;
-  } else if(*ptr == '&') {
-    return TOKENIZER_AND;
-  } else if(*ptr == '|') {
-    return TOKENIZER_OR;
   } else if(*ptr == '*') {
     return TOKENIZER_ASTR;
   } else if(*ptr == '/') {
     return TOKENIZER_SLASH;
-  } else if(*ptr == '%') {
-    return TOKENIZER_MOD;
   } else if(*ptr == '(') {
     return TOKENIZER_LEFTPAREN;
   } else if(*ptr == '#') {
@@ -234,7 +226,7 @@ static int get_next_token(void) {
     }
   }
 
-  if((*ptr >= 'a' && *ptr <= 'z') || (*ptr >= 'A' && *ptr <= 'Z')) {
+  if(*ptr >= 'a' && *ptr <= 'z') {
 
 // string addition
     if (*(ptr+1) == '$') {
@@ -335,6 +327,11 @@ VARIABLE_TYPE tokenizer_num(void)
   return atoi(ptr);
 }
 /*---------------------------------------------------------------------------*/
+uint32_t tokenizer_linenum(void)
+{
+  return (uint32_t)strtoul(ptr, NULL, 10);
+}
+/*---------------------------------------------------------------------------*/
 void tokenizer_string(char *dest, int len){
   char *string_end;
   int string_len;
@@ -367,9 +364,6 @@ int tokenizer_finished(void) {
 int tokenizer_variable_num(void) {
   if(*ptr >= 'a' && *ptr <= 'z') {
     return *ptr - 'a';
-  }
-  if(*ptr >= 'A' && *ptr <= 'Z') {
-    return 26 + (*ptr - 'A');
   }
   return -1;
 }
