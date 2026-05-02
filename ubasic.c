@@ -929,7 +929,7 @@ static void index_add(uint32_t linenum, char const* sourcepos) {
 }
 /*---------------------------------------------------------------------------*/
 static void jump_linenum_slow(uint32_t linenum) {
-  DEBUG_PRINTF("jump_linenum_slow:");
+  DEBUG_PRINTF("jump_linenum_slow: Looking for line %u.\n", linenum);
   tokenizer_init(program_ptr);
   while(tokenizer_linenum() != linenum) {
     do {
@@ -941,7 +941,13 @@ static void jump_linenum_slow(uint32_t linenum) {
         DEBUG_PRINTF("jump_linenum_slow: Found line %u.\n", tokenizer_linenum());
 	  #endif
 	#endif
+    if(tokenizer_token() == TOKENIZER_ENDOFINPUT) {
+      DEBUG_PRINTF("jump_linenum_slow: Line %u not found!\n", linenum);
+      ended = 1;
+      return;
+    }
   }
+  DEBUG_PRINTF("jump_linenum_slow: Successfully jumped to line %u.\n", linenum);
 }
 /*---------------------------------------------------------------------------*/
 static void jump_linenum(uint32_t linenum) {

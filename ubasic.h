@@ -45,10 +45,12 @@
 
 typedef VARIABLE_TYPE (*peek_func)(VARIABLE_TYPE);
 typedef void (*poke_func)(VARIABLE_TYPE, VARIABLE_TYPE);
-typedef void (*out_func)(const char *);
-typedef void (*put_func)(VARIABLE_TYPE);
-typedef VARIABLE_TYPE (*in_func)(void);
-typedef VARIABLE_TYPE (*get_func)(void);
+
+/* I/O function pointers matching C# wrapper API */
+typedef void (*out_func)(const char *message);
+typedef void (*put_func)(char character);
+typedef void (*in_func)(char *buffer, size_t max_len);
+typedef char (*get_func)(void);
 
 /*
  * Single buffer layout - Classic 8-bit BASIC style:
@@ -127,7 +129,6 @@ void ubasic_reset(void);  /* Clears variables */
 void ubasic_run(void);
 int ubasic_finished(void);
 void ubasic_load_program(const char *program); /* Preserves vars */
-void ubasic_resume(void);  /* Resume from saved position in memory */
 
 // string addition
 char* get_stringvariable(int);
