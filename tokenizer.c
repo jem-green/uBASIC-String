@@ -85,7 +85,6 @@ static const struct keyword_token keywords[] = {
   {"GOTO", TOKENIZER_GOTO},
   {"GOSUB", TOKENIZER_GOSUB},
   {"RETURN", TOKENIZER_RETURN},
-  {"CALL", TOKENIZER_CALL},
   {"REM", TOKENIZER_REM},
   {"PEEK", TOKENIZER_PEEK},
   {"POKE", TOKENIZER_POKE},
@@ -121,7 +120,6 @@ static const struct keyword_token tokens[] = {
 	{"TOKENIZER_GOTO",TOKENIZER_GOTO},
 	{"TOKENIZER_GOSUB",TOKENIZER_GOSUB},
 	{"TOKENIZER_RETURN",TOKENIZER_RETURN},
-	{"TOKENIZER_CALL",TOKENIZER_CALL},
 	{"TOKENIZER_REM",TOKENIZER_REM},
 	{"TOKENIZER_PEEK",TOKENIZER_PEEK},
 	{"TOKENIZER_POKE",TOKENIZER_POKE},
@@ -344,8 +342,8 @@ void tokenizer_string(char *dest, int len){
     return;
   }
   string_len = string_end - ptr - 1;
-  if(len < string_len) {
-    string_len = len;
+  if(len < string_len + 1) {
+    string_len = len - 1;
   }
   memcpy(dest, ptr + 1, string_len);
   dest[string_len] = 0;

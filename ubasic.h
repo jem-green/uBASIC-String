@@ -51,6 +51,7 @@ typedef void (*out_func)(const char *message);
 typedef void (*put_func)(char character);
 typedef void (*in_func)(char *buffer, size_t max_len);
 typedef char (*get_func)(void);
+typedef void (*err_func)(const char *code, const char *description, uint32_t line);
 
 /*
  * Single buffer layout - Classic 8-bit BASIC style:
@@ -140,5 +141,9 @@ void ubasic_set_out_function(out_func func);
 void ubasic_set_put_function(put_func func);
 void ubasic_set_in_function(in_func func);
 void ubasic_set_get_function(get_func func);
+void ubasic_set_error_function(err_func func);
+const char *ubasic_last_error_code(void);
+const char *ubasic_last_error_description(void);
+uint32_t ubasic_last_error_line(void);
 
 #endif /* __UBASIC_H__ */
