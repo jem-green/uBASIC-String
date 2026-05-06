@@ -33,6 +33,15 @@
 
 #include <stdint.h>
 
-#define VARIABLE_TYPE int32_t
+/*
+ * Default numeric type remains int32_t for deterministic integer mode.
+ * Override UBASIC_NUMERIC_TYPE (for example to double) at compile time
+ * when enabling alternate numeric behavior later.
+ */
+#ifndef UBASIC_NUMERIC_TYPE
+#define UBASIC_NUMERIC_TYPE int32_t
+#endif
+
+#define VARIABLE_TYPE UBASIC_NUMERIC_TYPE
 
 #endif /* __VARTYPE_H__ */

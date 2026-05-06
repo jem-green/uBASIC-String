@@ -68,6 +68,8 @@ static void gosub_push(uint32_t line_num);
 static uint32_t gosub_pop(void);
 static void for_push(for_state state);
 static for_state for_pop(void);
+static void push_statement(void);
+static void pop_statement(void);
 static void runtime_error(const char *code, const char *description, uint32_t line);
 
 static char const *program_ptr;
@@ -82,6 +84,8 @@ static int32_t *for_depth_cell = NULL;
 static int32_t *gosub_stack_mem = NULL;
 static for_state *for_stack = NULL;
 static VARIABLE_TYPE *variables_mem = NULL;
+static int32_t *push_depth_cell = NULL;
+static push_entry *push_stack_mem = NULL;
 
 // string additions
 static ubasic_string_state_t *string_state_mem = NULL;
@@ -172,6 +176,8 @@ void ubasic_init(uint8_t *memory, uint32_t memory_bytes) {
   for_depth_cell = (int32_t *)(memory + UBASIC_MEM_FOR_DEPTH_OFFSET);
   gosub_stack_mem = (int32_t *)(memory + UBASIC_MEM_GOSUB_STACK_OFFSET);
   for_stack = (for_state *)(memory + UBASIC_MEM_FOR_STACK_OFFSET);
+  push_depth_cell = (int32_t *)(memory + UBASIC_MEM_PUSH_DEPTH_OFFSET);
+  push_stack_mem = (push_entry *)(memory + UBASIC_MEM_PUSH_STACK_OFFSET);
   
   /* Don't initialize program_ptr, variables_mem, or string_state_mem - allows snapshot restore */
   #if VERBOSE
@@ -207,6 +213,9 @@ static void reset_control_state(void) {
   }
   if (for_stack != NULL) {
     memset(for_stack, 0, UBASIC_MAX_FOR_STACK_DEPTH * sizeof(for_state));
+  }
+  if (push_depth_cell != NULL) {
+    *push_depth_cell = 0;
   }
   last_error_code[0] = '\0';
   last_error_description = "";
@@ -362,8 +371,8 @@ static void accept(int token){
     DEBUG_PRINTF("accept: Token not what was expected (expected '%s', got %s).\n",
 	tokenizer_token_name(token),
 	tokenizer_token_name(tokenizer_token()));
-    tokenizer_error_print();
-    exit(1);
+    runtime_error("TS", "Token syntax mismatch", current_line_number);
+    return;
   }
   DEBUG_PRINTF("accept: Expected '%s', got it.\n", tokenizer_token_name(token));
   tokenizer_next();
@@ -1282,6 +1291,12 @@ static void statement(void){
   case TOKENIZER_END:
     end_statement();
     break;
+  case TOKENIZER_PUSH:
+    push_statement();
+    break;
+  case TOKENIZER_POP:
+    pop_statement();
+    break;
   case TOKENIZER_LET:
     accept(TOKENIZER_LET);
     /* Fall through. */
@@ -1456,6 +1471,70 @@ static for_state for_pop(void) {
     runtime_error("FS", "FOR stack underflow", current_line_number);
     return error_state;
   }
+}
+/*---------------------------------------------------------------------------*/
+static void push_statement(void) {
+  int32_t depth;
+  push_entry entry;
+  accept(TOKENIZER_PUSH);
+  if (tokenizer_stringlookahead()) {
+    entry.type = 1;
+    entry.ival = 0;
+    strncpy(entry.sval, sexpr(), UBASIC_PUSH_STRING_LEN);
+    entry.sval[UBASIC_PUSH_STRING_LEN] = '\0';
+  } else {
+    entry.type = 0;
+    entry.ival = expr();
+    entry.sval[0] = '\0';
+  }
+  if(ended) return;
+  depth = *push_depth_cell;
+  if(depth < UBASIC_MAX_PUSH_STACK_DEPTH) {
+    push_stack_mem[depth++] = entry;
+    *push_depth_cell = depth;
+  } else {
+    runtime_error("PS", "PUSH stack overflow", current_line_number);
+    return;
+  }
+  accept(TOKENIZER_LF);
+}
+/*---------------------------------------------------------------------------*/
+static void pop_statement(void) {
+  int32_t depth;
+  int varnum;
+  int is_string;
+  accept(TOKENIZER_POP);
+  varnum = tokenizer_variable_num();
+  if (tokenizer_token() == TOKENIZER_STRINGVARIABLE) {
+    is_string = 1;
+    accept(TOKENIZER_STRINGVARIABLE);
+  } else {
+    is_string = 0;
+    accept(TOKENIZER_VARIABLE);
+  }
+  if(ended) return;
+  depth = *push_depth_cell;
+  if(depth > 0) {
+    push_entry entry = push_stack_mem[--depth];
+    *push_depth_cell = depth;
+    if (is_string) {
+      if (entry.type != 1) {
+        runtime_error("PT", "POP type mismatch", current_line_number);
+        return;
+      }
+      set_stringvariable(varnum, entry.sval);
+    } else {
+      if (entry.type != 0) {
+        runtime_error("PT", "POP type mismatch", current_line_number);
+        return;
+      }
+      set_variable(varnum, entry.ival);
+    }
+  } else {
+    runtime_error("PS", "POP stack underflow", current_line_number);
+    return;
+  }
+  accept(TOKENIZER_LF);
 }
 /*---------------------------------------------------------------------------*/
 void ubasic_set_out_function(out_func func) {

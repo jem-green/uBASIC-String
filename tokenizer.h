@@ -73,6 +73,8 @@ enum {
   TOKENIZER_PEEK,
   TOKENIZER_POKE,
   TOKENIZER_END,
+  TOKENIZER_PUSH,
+  TOKENIZER_POP,
   TOKENIZER_COMMA,
   TOKENIZER_SEMICOLON,
   TOKENIZER_PLUS,
@@ -88,6 +90,8 @@ enum {
   TOKENIZER_LF,
   TOKENIZER_CR
 };
+
+// Public
 
 void tokenizer_goto(const char *program);
 void tokenizer_init(const char *program);

@@ -62,7 +62,7 @@ typedef void (*err_func)(const char *code, const char *description, uint32_t lin
  *     int32_t gosub_stack[UBASIC_MAX_GOSUB_STACK_DEPTH]
  *     struct for_state for_stack[UBASIC_MAX_FOR_STACK_DEPTH]
  *     program bytes (NUL-terminated)
- *     VARIABLE_TYPE variables[UBASIC_VARIABLE_COUNT]  (a-z integer variables)
+ *     VARIABLE_TYPE variables[UBASIC_VARIABLE_COUNT]  (a-z integer variables, int32_t)
  *     ubasic_string_state_t  (pool_base, pool_min + var_off[26] string descriptors)
  *   
  *   DYNAMIC SPACE (string pool grows down from high memory during runtime)
@@ -80,6 +80,8 @@ typedef void (*err_func)(const char *code, const char *description, uint32_t lin
 #endif
 #define UBASIC_MAX_GOSUB_STACK_DEPTH 10
 #define UBASIC_MAX_FOR_STACK_DEPTH 4
+#define UBASIC_MAX_PUSH_STACK_DEPTH 16
+#define UBASIC_PUSH_STRING_LEN 40
 #define UBASIC_VARIABLE_COUNT 26
 
 #ifndef UBASIC_HEAP_BYTES
@@ -92,6 +94,12 @@ typedef struct for_state {
   int32_t to;
 } for_state;
 
+typedef struct push_entry {
+  int32_t type;                          /* 0 = integer, 1 = string */
+  int32_t ival;                          /* integer value (int32_t) */
+  char    sval[UBASIC_PUSH_STRING_LEN + 1];
+} push_entry;
+
 /* Control state at low addresses */
 #define UBASIC_MEM_RESUME_OFFSET      0
 #define UBASIC_MEM_GOSUB_DEPTH_OFFSET 4
@@ -99,12 +107,20 @@ typedef struct for_state {
 #define UBASIC_MEM_GOSUB_STACK_OFFSET 12
 #define UBASIC_MEM_FOR_STACK_OFFSET \
   (UBASIC_MEM_GOSUB_STACK_OFFSET + UBASIC_MAX_GOSUB_STACK_DEPTH * (int)sizeof(int32_t))
+/* PUSH/POP stack: depth cell + typed push_entry slots */
+#define UBASIC_MEM_PUSH_DEPTH_OFFSET \
+  (UBASIC_MEM_FOR_STACK_OFFSET + UBASIC_MAX_FOR_STACK_DEPTH * (int)sizeof(for_state))
+#define UBASIC_MEM_PUSH_STACK_OFFSET \
+  (UBASIC_MEM_PUSH_DEPTH_OFFSET + (int)sizeof(int32_t))
 /* Program starts immediately after control structures */
 #define UBASIC_MEM_PROGRAM_OFFSET \
-  (UBASIC_MEM_FOR_STACK_OFFSET + UBASIC_MAX_FOR_STACK_DEPTH * (int)sizeof(for_state))
+  (UBASIC_MEM_PUSH_STACK_OFFSET + UBASIC_MAX_PUSH_STACK_DEPTH * (int)sizeof(push_entry))
+
+/* Variables placed in LOW memory after program (calculated at runtime) */
+#define UBASIC_VARIABLES_SIZE (UBASIC_VARIABLE_COUNT * (int)sizeof(VARIABLE_TYPE))
+#define UBASIC_PUSH_STACK_SIZE (UBASIC_MAX_PUSH_STACK_DEPTH * (int)sizeof(push_entry))
 
 /* Variables and string state in LOW memory after program (calculated at runtime) */
-#define UBASIC_VARIABLES_SIZE (UBASIC_VARIABLE_COUNT * (int)sizeof(VARIABLE_TYPE))
 #define UBASIC_STRING_STATE_SIZE ((int)sizeof(ubasic_string_state_t))
 
 /* These offsets are calculated in ubasic_init and ubasic_load_program */
