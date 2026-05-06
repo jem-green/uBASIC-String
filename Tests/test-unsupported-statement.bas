@@ -1,0 +1,8 @@
+10 PRINT "start"
+20 LET a = 2
+30 IF a=1 THEN GOTO 50 ELSE GOTO 40
+40 PRINT "a is not 1"
+45 GOTO 60
+50 PRINT "a is 1"
+60 PRINT "end"
+70 END

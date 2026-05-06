@@ -1,0 +1,10 @@
+1 PRINT "start of test"
+10 GOSUB 100
+20 FOR i = 1 TO 10
+30 PRINT i
+40 NEXT i
+50 PRINT "end"
+60 END
+100 PRINT "subroutine"
+110 RETURN
+120 END

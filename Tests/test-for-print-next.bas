@@ -1,0 +1,6 @@
+10 PRINT "start"
+20 FOR j=1 TO 2
+30 PRINT "j="; j
+40 NEXT j
+50 PRINT "END"
+60 END

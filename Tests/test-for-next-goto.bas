@@ -1,0 +1,18 @@
+170 LET j = 0
+180 LET k = 0
+190 LET a = 0
+190 LET b = 2
+200 FOR j=1 TO 2
+210 a = a + 1
+220 PRINT "a="; a; " b="; b
+230 NEXT j
+240 PRINT "check"
+250 FOR j=1 TO 3
+260 FOR k=1 TO 3
+265 PRINT "j="; j; " k="; k
+270 IF j=k THEN GOTO 290
+280 IF a=b THEN GOTO 210
+290 NEXT k
+300 NEXT j
+310 PRINT "end"
+320 END

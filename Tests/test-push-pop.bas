@@ -1,0 +1,7 @@
+10 LET a = 99
+20 PUSH a
+30 LET a = 42
+40 PRINT a
+50 POP a
+60 PRINT a
+70 END

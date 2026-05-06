@@ -1,0 +1,5 @@
+10 LET a = 0
+20 IF a=0 THEN GOTO 50
+30 PRINT "bad"
+40 PRINT "else"
+50 END
