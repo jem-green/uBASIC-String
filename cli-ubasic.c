@@ -22,6 +22,7 @@
 
 static void run_program(void);
 static void add_line(const char *line);
+static int extract_linenum_and_content(const char *line, uint32_t *linenum, const char **content_start);
 static void insert_char_array(char *dest, const char *src, char *position);
 static int get_current_line_len(void);
 static void delete_char_array(char *dest, char *position, int numChars);
@@ -35,6 +36,15 @@ static char memory[MEMORY_SIZE];
 static char program[MAX_PROGRAM_SIZE];
 
 static char *ptr, *nextptr, *startptr;
+
+// Error logging for CLI: 2-char code and description
+static void cli_error(const char *code, const char *description) {
+  if (code && code[0] && code[1]) {
+    fprintf(stderr, "%c%c %s\n", code[0], code[1], description ? description : "");
+  } else {
+    fprintf(stderr, "?? %s\n", description ? description : "");
+  }
+}
 
 /*---------------------------------------------------------------------------*/
 int main(int argc, char* argv[]) {
@@ -72,13 +82,17 @@ int main(int argc, char* argv[]) {
   
   char input[MAX_LINE_LENGTH];
 
-  printf("uBasic CLI - Type 'RUN' to execute, 'LIST' to view, 'NEW' to clear, 'EXIT' to quit\n");
+
+  printf("uBasic CLI - Commands: RUN, LIST, NEW, LOAD <file>, SAVE <file>, EXIT\n");
 
   while (1) {
     printf("> ");
     fgets(input, MAX_LINE_LENGTH, stdin);
 
-    if (strncmp(input, "RUN", 3) == 0) {
+    // Ignore empty input (just Enter)
+    if (input[0] == 0) {
+	    continue;
+    } else if (strncmp(input, "RUN", 3) == 0) {
       run_program();
     } else if (strncmp(input, "LIST", 4) == 0) {
       // Consider checking to see if a linenumber is provided
@@ -87,8 +101,72 @@ int main(int argc, char* argv[]) {
       memset(program, 0, sizeof(program)); // Sets all elements to 0
     } else if (strncmp(input, "EXIT", 4) == 0) {
         break;
+    } else if (strncmp(input, "LOAD", 4) == 0) {
+      char *filename = input + 4;
+      // Eat whitespace
+      while (*filename == ' ' || *filename == '\t') filename++;
+      DEBUG_PRINTF("filename: '%s'\n", filename);
+      if (*filename == 0) {
+        cli_error("SY", "Syntax: LOAD <filename>");
+      } else {
+        // Strip trailing \r and \n
+        size_t flen = strlen(filename);
+        while (flen > 0 && (filename[flen-1] == '\r' || filename[flen-1] == '\n')) {
+          filename[--flen] = '\0';
+        }
+        // Remove surrounding quotes if present
+        flen = strlen(filename);
+        if (flen > 1 && filename[0] == '"' && filename[flen-1] == '"') {
+          filename[flen-1] = '\0';
+          filename++;
+        }
+        FILE *f = fopen(filename, "r");
+        if (!f) {
+          cli_error("IO", "Could not open file for reading");
+        } else {
+          size_t n = fread(program, 1, MAX_PROGRAM_SIZE-1, f);
+          program[n] = '\0';
+          fclose(f);
+          printf("Loaded %zu bytes from %s\n", n, filename);
+        }
+      }
+    } else if (strncmp(input, "SAVE", 4) == 0) {
+      char *filename = input + 4;
+      // Eat whitespace
+      while (*filename == ' ' || *filename == '\t') filename++;
+      DEBUG_PRINTF("filename: '%s'\n", filename);
+      if (*filename == 0) {
+        cli_error("SY", "Syntax: SAVE <filename>");
+      } else {
+        // Strip trailing \r and \n
+        size_t flen = strlen(filename);
+        while (flen > 0 && (filename[flen-1] == '\r' || filename[flen-1] == '\n')) {
+          filename[--flen] = '\0';
+        }
+        // Remove surrounding quotes if present
+        flen = strlen(filename);
+        if (flen > 1 && filename[0] == '"' && filename[flen-1] == '"') {
+          filename[flen-1] = '\0';
+          filename++;
+        }
+        FILE *f = fopen(filename, "w");
+        if (!f) {
+          cli_error("IO", "Could not open file for writing");
+        } else {
+          size_t n = fwrite(program, 1, strlen(program), f);
+          fclose(f);
+          printf("Saved %zu bytes to %s\n", n, filename);
+        }
+      }
     } else {
-        add_line(input);
+        // Check if input is a valid line (starts with a number) or treat as invalid command
+        uint32_t dummy;
+        const char *dummy_content;
+        if (extract_linenum_and_content(input, &dummy, &dummy_content)) {
+            add_line(input);
+        } else {
+            cli_error("IC", "Unrecognized command");
+        }
     }
   }
 
@@ -103,44 +181,68 @@ static void run_program(void) {
     }
 }
 /*---------------------------------------------------------------------------*/
-static void add_line(const char *line) {
 
+static void add_line(const char *line) {
   startptr = program;
-  uint32_t linenum;
-  static char const *lineptr;
-  lineptr = line;
-  linenum = (uint32_t)strtoul(lineptr, NULL, 10);
-  int linelen = strlen(line);
-  
-  // want to check if the new line has content
-  
-  if (linenum > 0) {
-    DEBUG_PRINTF("add_line: Add inputted line number %u\n", linenum);
-    // Problem with find_linenumber of there are no line number
-    // ptr returns pointing to the end of the previous lineno being
-    // search for.
-    uint32_t r = find_linenum(linenum);
-    DEBUG_PRINTF("add_line: Found line number %u\n", r);
-    if (linenum != r) {
-      DEBUG_PRINTF("add_line: Insert new line %u\n",linenum);
-      insert_char_array(startptr, line, ptr);
-    } else {
-      DEBUG_PRINTF("add_line: replace existing line %u\n",linenum);
-      int numChars = 0;
-      numChars = get_current_line_len();
-      DEBUG_PRINTF("add_line: numchars %d\n",numChars);
-      delete_char_array(startptr, ptr, numChars);
-      
-      // Need a better way to check if the line is just the line number
-      
-      if (linelen > 4) {
-        insert_char_array(startptr, line, ptr);
-      }
+  uint32_t linenum = 0;
+  const char *content = NULL;
+  int has_linenum = extract_linenum_and_content(line, &linenum, &content);
+  if (!has_linenum || linenum == 0) {
+    DEBUG_PRINTF("add_line: No valid line number found\n");
+    return;
+  }
+
+  // Check if content after line number is empty (delete request)
+  int is_delete = 1;
+  for (const char *p = content; *p != '\0'; ++p) {
+    if (*p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') {
+      is_delete = 0;
+      break;
     }
   }
-  
+
+  DEBUG_PRINTF("add_line: line %u, is_delete=%d\n", linenum, is_delete);
+
+  uint32_t r = find_linenum(linenum);
+  DEBUG_PRINTF("add_line: Found line number %u\n", r);
+  if (linenum != r) {
+    if (!is_delete) {
+      DEBUG_PRINTF("add_line: Insert new line %u\n", linenum);
+      insert_char_array(startptr, line, ptr);
+    }
+    // else: trying to delete a non-existent line, do nothing
+  } else {
+    DEBUG_PRINTF("add_line: replace/delete existing line %u\n", linenum);
+    int numChars = get_current_line_len();
+    DEBUG_PRINTF("add_line: numchars %d\n", numChars);
+    delete_char_array(startptr, ptr, numChars);
+    if (!is_delete) {
+      insert_char_array(startptr, line, ptr);
+    }
+    // else: line deleted
+  }
   DEBUG_PRINTF("add_line: exit\n");
-  
+}
+
+// Helper: Extracts line number and pointer to content after it
+// Returns 1 if a valid line number is found, 0 otherwise
+static int extract_linenum_and_content(const char *line, uint32_t *linenum, const char **content_start) {
+  const char *p = line;
+  // Skip leading whitespace
+  while (*p == ' ' || *p == '\t') ++p;
+  // Parse number
+  char numbuf[16];
+  int i = 0;
+  while (*p >= '0' && *p <= '9' && i < 15) {
+    numbuf[i++] = *p++;
+  }
+  numbuf[i] = '\0';
+  if (i == 0) return 0; // No number found
+  *linenum = (uint32_t)strtoul(numbuf, NULL, 10);
+  // Skip whitespace after number
+  while (*p == ' ' || *p == '\t') ++p;
+  *content_start = p;
+  return 1;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -236,7 +338,7 @@ static int get_current_line_len(void) {
   nextptr++;  
   #if DEBUG
 	#if VERBOSE
-    DEBUG_PRINTF("get_current_line_len: %d\n", nextptr - ptr);
+    DEBUG_PRINTF("get_current_line_len: %Id\n", nextptr - ptr);
 	#endif
 	#endif
   return (nextptr - ptr);
