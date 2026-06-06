@@ -1,4 +1,4 @@
-uBASIC-string: a slightly less simple BASIC interpreter
+uBasic-string: a slightly less simple BASIC interpreter
 =======================================================
 
 http://dunkels.com/adam/ubasic/
